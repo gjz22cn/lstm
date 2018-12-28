@@ -5,25 +5,27 @@ import math
 from pandas import read_csv
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
-from sklearn.utils import shuffle
 from keras.models import Sequential, load_model
-from keras.layers import Dense,LSTM
+from keras.layers import Dense, LSTM
 import matplotlib.pyplot as plt
 
 skip_saved_model = False
-g_modelFileName = './comp_model/model_000001_save.h5'
+g_path = './data'
+g_modelFileName = '../comp_model/model_000001_save.h5'
 g_preLen = 20
+
 
 def prepare_dataset(data, time_steps):
     cnt = data.shape[0] - time_steps + 1
     data_x = data[:cnt]
     for i in range(1, time_steps):
-        data_x = np.concatenate([data_x, data[i:i+cnt]], axis=1)
+        data_x = np.concatenate([data_x, data[i:i + cnt]], axis=1)
 
     data_x = data_x.reshape((cnt, time_steps, data.shape[1]))
     data_y = data[time_steps:, 3]
 
-    return data_x[:-1],data_x[-1:],data_y
+    return data_x[:-1], data_x[-1:], data_y
+
 
 def prepare_model(time_steps, features):
     model = None
@@ -33,33 +35,31 @@ def prepare_model(time_steps, features):
 
     if model is None:
         model = Sequential()
-        model.add(LSTM(50, input_shape=(time_steps,features)))
+        model.add(LSTM(50, input_shape=(time_steps, features)))
         model.add(Dense(1))
         model.compile(loss='mae', optimizer='adam')
 
     return model
 
 
-np.random.seed(2018)
-scaler = MinMaxScaler(feature_range=(0,1))
+scaler = MinMaxScaler(feature_range=(0, 1))
 
-data = read_csv('./data/000001.SZ.csv', header=0, usecols=[], encoding='utf-8')
+file_name = '../data/000001.SZ.csv'
+data = read_csv(file_name, header=0, usecols=['open', 'high', 'low', 'close', 'pre_close', 'vol', 'amount'],
+                encoding='utf-8')
 values = data.values.astype('float32')
 g_count = values.shape[0] - g_preLen
 dataset = scaler.fit_transform(values)
-data_x,data_x_last,data_y = prepare_dataset(dataset, g_preLen)
+data_x, data_x_last, data_y = prepare_dataset(dataset, g_preLen)
 
 train_size = int(data_x.shape[0] * 0.67)
-train_x,test_x = data_x[:train_size],data_x[train_size:]
-train_y,test_y = data_y[:train_size],data_y[train_size:]
+train_x, test_x = data_x[:train_size], data_x[train_size:]
+train_y, test_y = data_y[:train_size], data_y[train_size:]
 
-index = [i for i in range(train_x.shape[0])]
-index = shuffle(index)
-train_x_s,train_y_s = train_x[index],train_y[index]
 print(train_x.shape, train_y.shape, test_x.shape, test_y.shape)
 
 model = prepare_model(g_preLen, train_x.shape[2])
-model.fit(train_x_s, train_y_s, epochs=10, batch_size=64, validation_data=(test_x, test_y), verbose=1, shuffle=False)
+model.fit(train_x, train_y, epochs=200, batch_size=64, validation_data=(test_x, test_y), verbose=1, shuffle=True)
 model.save(g_modelFileName)
 
 trainPredict = model.predict(train_x)
@@ -68,12 +68,14 @@ trainPredict = scaler.inverse_transform(train_inverse_input)
 trainPredict = trainPredict[:, 3]
 
 testPredict = model.predict(test_x)
-test_inverse_input = np.concatenate([dataset[train_size:g_count, 0:3], testPredict, dataset[train_size:g_count, 4:]], axis=1)
+test_inverse_input = np.concatenate([dataset[train_size:g_count, 0:3], testPredict, dataset[train_size:g_count, 4:]],
+                                    axis=1)
 testPredict = scaler.inverse_transform(test_inverse_input)
 testPredict = testPredict[:, 3]
 
 lastPredict = model.predict(data_x_last)
-last_inverse_input = np.concatenate([dataset[g_count:g_count+1, 0:3], lastPredict, dataset[g_count:g_count+1, 4:]], axis=1)
+last_inverse_input = np.concatenate([dataset[g_count:g_count + 1, 0:3], lastPredict, dataset[g_count:g_count + 1, 4:]],
+                                    axis=1)
 lastPredict = scaler.inverse_transform(last_inverse_input)
 lastPredict = lastPredict[:, 3]
 print("lastPredict=", lastPredict)
@@ -88,18 +90,21 @@ oriPlot = values[:, 3]
 oriPlot = np.append(oriPlot, np.nan)
 
 trainPredictPlot = np.empty_like(oriPlot)
-trainPredict[:] = np.nan
-trainPredictPlot[g_preLen:g_preLen+train_size] = trainPredict
+trainPredictPlot[:] = np.nan
+trainPredictPlot[g_preLen:g_preLen + train_size] = trainPredict
 
 testPredictPlot = np.empty_like(oriPlot)
-testPredict[:] = np.nan
+testPredictPlot[:] = np.nan
 testPredictStartIdx = g_preLen + train_size
-testPredictPlot[testPredictStartIdx:testPredictStartIdx+testPredict.shape[0]] = testPredict
+testPredictPlot[testPredictStartIdx:testPredictStartIdx + testPredict.shape[0]] = testPredict
+#print("oriPlot:", oriPlot)
+#print("trainPredictPlot:", trainPredictPlot)
+#print("testPredictPlot:", testPredictPlot)
 
-l1 = plt.plot(oriPlot, color='red', linewidth=3, linestyle='--')
-l2 = plt.plot(trainPredictPlot, color='k', linewidth=2)
-l3 = plt.plot(testPredictPlot, color='g', linewidth=2)
+l1, = plt.plot(oriPlot, color='red', linewidth=3, linestyle='--')
+l2, = plt.plot(trainPredictPlot, color='k', linewidth=2)
+l3, = plt.plot(testPredictPlot, color='g', linewidth=2)
 plt.ylabel('yuan')
-plt.legend([l1,l2,l3], ('ori', 'train', 'test'), loc='best')
+plt.legend([l1, l2, l3], ('ori', 'train', 'test'), loc='best')
 plt.title('Prediction')
 plt.show()

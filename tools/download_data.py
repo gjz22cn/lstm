@@ -41,7 +41,7 @@ class DownloadClient:
         return stockList
 
     def getStockDailyInfo(self, code, name):
-        df = self.pro.daily(ts_code=code, start_date='20160101', end_date='20181130')
+        df = self.pro.daily(ts_code=code, start_date='20150101', end_date='20181130')
         '''
         名称	        类型	    描述
         ts_code	    str	    股票代码
