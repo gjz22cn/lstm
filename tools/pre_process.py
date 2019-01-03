@@ -12,6 +12,7 @@ class DataUtil:
         self.root_dir = dir
         self.start_date = '20140101'
         self.end_date = '20181130'
+        self.stocks_dir = os.path.join(self.root_dir, 'stocks')
         self.stock_dir = os.path.join(self.root_dir, 'stock')
         self.p230_dir = os.path.join(self.root_dir, 'p230')
         self.single_data_dir = os.path.join(self.root_dir, 'single_d')
@@ -148,14 +149,9 @@ class DataUtil:
 
         df = pd.read_csv(file, header=0, usecols=['date'], dtype={'date': str}, encoding='utf-8')
         date_a2 = df.values.flatten()
-        if len(date_array) != len(date_a2):
-            return False
 
-        for i in range(len(date_array)):
-            if date_array[i] != date_a2[i]:
-                return False
+        return self.is_date_list_valid(date_a2)
 
-        return True
 
     def gen_single_stock_list(self):
         stocks = self.get_all_stocks(1)
@@ -172,6 +168,97 @@ class DataUtil:
         file_path = os.path.join(self.single_data_dir, 'single_stock_list.csv')
         df.to_csv(file_path, columns=['ts_code'], mode='w', header=True, encoding="utf_8_sig")
 
+    def get_valid_single_stock_list(self):
+        file_path = os.path.join(self.single_data_dir, 'single_stock_list.csv')
+        df = pd.read_csv(file_path, header=0, usecols=['ts_code'], encoding='utf-8')
+        return df.values.flatten()
+
+    def is_date_list_valid(self, date):
+        date_array = ['20181203', '20181204', '20181205', '20181206', '20181207',
+                      '20181210', '20181211', '20181212', '20181213', '20181214',
+                      '20181217', '20181218', '20181219', '20181220', '20181221',
+                      '20181224', '20181225', '20181226', '20181227', '20181228']
+
+        if len(date_array) != len(date):
+            return False
+
+        for i in range(len(date_array)):
+            if date_array[i] != date[i]:
+                return False
+
+        return True
+
+    def gen_single_data_for_stock(self, ts_code):
+        st_code = ts_code.split('.')[0]
+        file = os.path.join(self.stocks_dir, st_code+'.csv')
+        p230_file = os.path.join(self.p230_dir, st_code + '.csv')
+
+        if not os.path.exists(file):
+            print("gen_single_dataset_for_stock(), no stock file for %s" % ts_code)
+            return False
+
+        if not os.path.exists(p230_file):
+            print("gen_single_dataset_for_stock(), no p230 file for %s" % ts_code)
+            return False
+
+        cols = ['trade_date', 'open', 'high', 'low', 'close', 'vol', 'amount']
+        df = pd.read_csv(file, header=0, usecols=cols, dtype={'trade_date': str}, encoding='utf-8')
+        if df is None:
+            return False
+
+        row_n = df.shape[0]
+
+        if row_n < 20:
+            print("gen_single_dataset_for_stock(), stock file's data is not enough for %s" % ts_code)
+            return False
+
+        values = df.iloc[-20:].values
+
+        if not self.is_date_list_valid(values[:, 0:1].flatten()):
+            print("gen_single_dataset_for_stock(), stock file's date list is invalid for %s" % ts_code)
+            return False
+
+        df_p230 = pd.read_csv(p230_file, header=0, usecols=['date', 'p230'], dtype={'date': str}, encoding='utf-8')
+        if df_p230 is None:
+            print("gen_single_dataset_for_stock(), p230 file for %s has no data" % ts_code)
+            return False
+
+        p230_values = df_p230.values
+        if not self.is_date_list_valid(p230_values[:, 0:1].flatten()):
+            print("gen_single_dataset_for_stock(), p230 file's date list is invalid for %s" % ts_code)
+            return False
+
+        new_values = np.concatenate([values, p230_values[:, 1:]], axis=1)
+        new_cols = ['trade_date', 'open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
+        new_df = pd.DataFrame(new_values, columns=new_cols)
+        file_path = os.path.join(self.single_data_dir, 's_'+st_code+'.csv')
+        new_df.to_csv(file_path, columns=new_cols, mode='w', header=True, encoding="utf_8_sig")
+
+        return True
+
+    def gen_single_data(self):
+        stocks = self.get_valid_single_stock_list()
+        new_stocks = []
+        need_save = False
+        for i in range(len(stocks)):
+            if self.gen_single_data_for_stock(stocks[i]):
+                new_stocks.append(stocks[i])
+            else:
+                need_save = True
+
+        print("new_stocks:", new_stocks)
+
+        if need_save:
+            df = pd.DataFrame(new_stocks, columns=['ts_code'])
+            file_path = os.path.join(self.single_data_dir, 'single_stock_list.csv')
+            df.to_csv(file_path, columns=['ts_code'], mode='w', header=True, encoding="utf_8_sig")
+
+    def get_single_dataset(self):
+        stocks = self.get_valid_single_stock_list()
+        for stock in stocks:
+            self.get_single_dataset_for_stock(stock)
+
+
 
 if __name__ == '__main__':
     dataUtil = DataUtil('../')
@@ -179,4 +266,10 @@ if __name__ == '__main__':
     # df = ts.get_tick_data('002001', date='20181203', src='tt')
     # df = ts.get_realtime_quotes('000581')
     # print(df)
-    dataUtil.gen_p230_for_stocks()
+    #dataUtil.gen_p230_for_stocks()
+
+    # generate valid stock_list for single predict
+    #dataUtil.gen_single_stock_list()
+
+    # generate dataset for single predict
+    #dataUtil.gen_single_data()
