@@ -13,6 +13,8 @@ class DataUtil:
         self.start_date = '20140101'
         self.end_date = '20181130'
         self.stock_dir = os.path.join(self.root_dir, 'stock')
+        self.p230_dir = os.path.join(self.root_dir, 'p230')
+        self.single_data_dir = os.path.join(self.root_dir, 'single_d')
         ts.set_token('b1de6890364825a4b7b2d227b64c09a486239daf67451c5638404c62')
         self.pro = ts.pro_api()
 
@@ -48,7 +50,7 @@ class DataUtil:
         # df.to_csv(file_path, columns=columns, mode=mode, header=need_header, encoding="utf_8_sig")
 
     def get_all_stocks(self, type):
-        file = os.path.join(self.root_dir, 'ori/stock_list.csv')
+        file = os.path.join(self.root_dir, 'stock_list.csv')
         if not os.path.exists(file):
             return []
 
@@ -91,13 +93,90 @@ class DataUtil:
             self.collect_data_for_stock(stock)
             break
 
+    def get_p230_in_date_file(self, date_file):
+        if not date_file.endswith('.csv'):
+            return None
+
+        cols = ['time', 'price', 'change', 'volume', 'amount', 'type']
+        df = pd.read_csv(date_file, header=0, usecols=cols, encoding='utf-8')
+        for index, row in df.iterrows():
+            if row['time'] >= '14:30:00':
+                return row['price']
+
+        return None
+
+    def gen_p230_for_stock(self, ts_code):
+        st_code = ts_code.split('.')[0]
+        dir = os.path.join(self.stock_dir, st_code)
+        if not os.path.exists(dir):
+            return
+
+        data = []
+        list_fenbi = os.listdir(dir)
+        list_fenbi = sorted(list_fenbi)
+        for item in list_fenbi:
+            if len(item) < 19:
+                continue
+            date = item[7:15]
+            p230 = self.get_p230_in_date_file(os.path.join(dir, item))
+
+            if p230 is None:
+                continue
+
+            data.append([date, p230])
+
+        cols = ['date', 'p230']
+        df_p230 = pd.DataFrame(data, columns=cols)
+        p230_path = os.path.join(self.p230_dir, st_code + '.csv')
+        df_p230.to_csv(p230_path, columns=cols, mode='w', header=True, encoding="utf_8_sig")
+
+    def gen_p230_for_stocks(self):
+        stocks = self.get_all_stocks(1)
+        for stock in stocks:
+            self.gen_p230_for_stock(stock)
+
+    def is_valid_single_stock(self, ts_code):
+        st_code = ts_code.split('.')[0]
+        file = os.path.join(self.p230_dir, st_code + '.csv')
+        if not os.path.exists(file):
+            return False
+
+        date_array = ['20181203', '20181204', '20181205', '20181206', '20181207',
+                      '20181210', '20181211', '20181212', '20181213', '20181214',
+                      '20181217', '20181218', '20181219', '20181220', '20181221',
+                      '20181224', '20181225', '20181226', '20181227', '20181228']
+
+        df = pd.read_csv(file, header=0, usecols=['date'], dtype={'date': str}, encoding='utf-8')
+        date_a2 = df.values.flatten()
+        if len(date_array) != len(date_a2):
+            return False
+
+        for i in range(len(date_array)):
+            if date_array[i] != date_a2[i]:
+                return False
+
+        return True
+
+    def gen_single_stock_list(self):
+        stocks = self.get_all_stocks(1)
+        single_stocks = []
+        for stock in stocks:
+            if not self.is_valid_single_stock(stock):
+                continue
+            single_stocks.append(stock)
+
+        if len(single_stocks) == 0:
+            return
+
+        df = pd.DataFrame(single_stocks, columns=['ts_code'])
+        file_path = os.path.join(self.single_data_dir, 'single_stock_list.csv')
+        df.to_csv(file_path, columns=['ts_code'], mode='w', header=True, encoding="utf_8_sig")
+
 
 if __name__ == '__main__':
-    #dataUtil = DataUtil('../')
-    #dataUtil.collect_data_for_stocks()
-    #df = ts.get_tick_data('002001', date='20181203', src='tt')
-    df = ts.get_realtime_quotes('000581')
-    print(df)
-
-
-
+    dataUtil = DataUtil('../')
+    # dataUtil.collect_data_for_stocks()
+    # df = ts.get_tick_data('002001', date='20181203', src='tt')
+    # df = ts.get_realtime_quotes('000581')
+    # print(df)
+    dataUtil.gen_p230_for_stocks()
