@@ -2,14 +2,18 @@
 # -*- coding: UTF-8 -*-
 
 import os
+import time
 import tushare as ts
+import pandas as pd
 
 
 class DownloadClient:
     def __init__(self):
-        self.dataDir = '..\data'
+        self.dataDir = '..\stocks'
         ts.set_token('b1de6890364825a4b7b2d227b64c09a486239daf67451c5638404c62')
         self.pro = ts.pro_api()
+        self.start_date = '20140101'
+        self.end_date = '20181231'
 
     # 查询当前所有正常上市交易的股票列表
     def getStockList(self):
@@ -40,8 +44,8 @@ class DownloadClient:
                          encoding="utf_8_sig")
         return stockList
 
-    def getStockDailyInfo(self, code, name):
-        df = self.pro.daily(ts_code=code, start_date='20150101', end_date='20181130')
+    def getStockDailyInfo(self, code):
+        df = self.pro.daily(ts_code=code, start_date=self.start_date, end_date=self.end_date)
         '''
         名称	        类型	    描述
         ts_code	    str	    股票代码
@@ -56,12 +60,13 @@ class DownloadClient:
         vol	        float	成交量 （手）
         amount	    float	成交额 （千元）
         '''
-        fileFullPath = os.path.join(self.dataDir, code + '.csv')
+
+        fileFullPath = os.path.join(self.dataDir, code.split('.')[0] + '.csv')
         mode = 'w'
         needHeader=True
-        if os.path.exists(fileFullPath):
-            mode = 'a'
-            needHeader=False
+        #if os.path.exists(fileFullPath):
+        #    mode = 'a'
+        #    needHeader=False
 
         # colunms 保存指定的列索引
         columns = ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'change', 'pct_chg', 'vol', 'amount']
@@ -71,12 +76,71 @@ class DownloadClient:
         df.to_csv(fileFullPath, columns=columns, mode=mode, header=needHeader, encoding="utf_8_sig")
 
 
+    def get_fenbi_for_stock(self, st_code):
+        stock_file = os.path.join('../stocks', st_code+'.csv')
+        if not os.path.exists(stock_file):
+            return
+
+        count = 0
+
+        dst_dir = os.path.join('../stock', st_code)
+        if not os.path.exists(dst_dir):
+            os.makedirs(dst_dir)
+
+        columns = ['time', 'price', 'change', 'volume', 'amount', 'type']
+        df_s = pd.read_csv(stock_file, header=0, usecols=['trade_date'], dtype={'trade_date': str}, encoding='utf-8')
+        for index, row in df_s.iterrows():
+            date = row['trade_date']
+
+            if not date.startswith('201812'):
+                continue
+
+            file_path = os.path.join(dst_dir, st_code + '_' + date + '.csv')
+            if os.path.exists(file_path):
+                print("skip %s %s" % (st_code, date))
+                continue
+
+            count += 1
+            if count % 5 == 0:
+                time.sleep(1)
+
+            df = ts.get_tick_data(st_code, date=date, src='tt')
+            if df is None:
+                print("%s %s is None" % (st_code, date))
+                continue
+
+            df = df.sort_values(by='time', ascending=True)
+            df.to_csv(file_path, columns=columns, mode='w', header=True, encoding="utf_8_sig")
+
+
+    def get_fenbi_for_stocks(self):
+        dir = '../stocks'
+        list = os.listdir(dir)
+        for file in list:
+            if not file.endswith('.csv'):
+                continue
+
+            if file.startswith('002') or file.startswith('300'):
+                self.get_fenbi_for_stock(file[:-4])
+
+
+
 if __name__ == '__main__':
+
     downloadClient = DownloadClient()
+    '''
     stockList = downloadClient.getStockList()
+
     count = 0
     for i in stockList.index:
-        downloadClient.getStockDailyInfo(stockList.loc[i]['ts_code'], stockList.loc[i]['name'])
+        if not stockList.loc[i]['ts_code'].startswith('6003'):
+            continue
+        downloadClient.getStockDailyInfo(stockList.loc[i]['ts_code'])
+        if count%5 == 0:
+            time.sleep(1)
+
         count += 1
-        if count == 5:
-            break
+
+    print("count=", count)
+    '''
+    downloadClient.get_fenbi_for_stocks()

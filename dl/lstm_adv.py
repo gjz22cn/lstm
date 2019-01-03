@@ -9,10 +9,13 @@ from keras.models import Sequential, load_model
 from keras.layers import Dense, LSTM
 import matplotlib.pyplot as plt
 
-skip_saved_model = False
+#skip_saved_model = False
+skip_saved_model = True
+g_modelDir = '../single_m'
+g_stock = '002001.SZ'
 g_path = './data'
-g_modelFileName = '../comp_model/model_000001_save.h5'
-g_preLen = 20
+g_modelFileName = g_modelDir + '/model_'+g_stock+'_save.h5'
+g_preLen = 30
 
 
 def prepare_dataset(data, time_steps):
@@ -44,7 +47,7 @@ def prepare_model(time_steps, features):
 
 scaler = MinMaxScaler(feature_range=(0, 1))
 
-file_name = '../data/000001.SZ.csv'
+file_name = '../data/'+g_stock+'.csv'
 data = read_csv(file_name, header=0, usecols=['open', 'high', 'low', 'close', 'pre_close', 'vol', 'amount'],
                 encoding='utf-8')
 values = data.values.astype('float32')
@@ -102,8 +105,8 @@ testPredictPlot[testPredictStartIdx:testPredictStartIdx + testPredict.shape[0]] 
 #print("testPredictPlot:", testPredictPlot)
 
 l1, = plt.plot(oriPlot, color='red', linewidth=3, linestyle='--')
-l2, = plt.plot(trainPredictPlot, color='k', linewidth=2)
-l3, = plt.plot(testPredictPlot, color='g', linewidth=2)
+l2, = plt.plot(trainPredictPlot, color='k', linewidth=2, linestyle='--')
+l3, = plt.plot(testPredictPlot, color='g', linewidth=2, linestyle='--')
 plt.ylabel('yuan')
 plt.legend([l1, l2, l3], ('ori', 'train', 'test'), loc='best')
 plt.title('Prediction')
