@@ -1,9 +1,6 @@
 import os
-import sys
 import numpy as np
-import datetime
-import csv
-from pandas import read_csv
+import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential, load_model
 from keras.layers import Dense, LSTM
@@ -12,90 +9,112 @@ skip_saved_model = False
 # skip_saved_model = True
 g_modelDir = '../single_m'
 g_path = './data'
-g_preLen = 30
-
-output_file_name = '../predict/single_' + datetime.datetime.now().strftime('%Y%m%d%H%M%S') + '.csv'
-out = open(output_file_name, 'w', newline='')
-csv_write = csv.writer(out, dialect='excel')
-
-scaler = MinMaxScaler(feature_range=(0, 1))
+g_preLen = 10
 
 
-def prepare_dataset(data, time_steps):
-    cnt = data.shape[0] - time_steps + 1
-    data_x = data[:cnt]
-    for i in range(1, time_steps):
-        data_x = np.concatenate([data_x, data[i:i + cnt]], axis=1)
+class SingleLstm:
+    def __init__(self):
+        self.scaler = MinMaxScaler(feature_range=(0, 1))
+        self.root_dir = '../'
+        self.single_dir = os.path.join(self.root_dir, 'single')
+        self.single_data_dir = os.path.join(self.root_dir, 'single_d')
+        self.data_dir = os.path.join(self.root_dir, 'single_d_10')
+        self.model_file = os.path.join(self.single_dir, 'single_m.h5')
+        self.time_steps = 10
+        self.features = 7
+        self.skip_saved_model = False
+        self.model = None
 
-    data_x = data_x.reshape((cnt, time_steps, data.shape[1]))
-    data_y = data[time_steps:, 3]
+    def get_valid_single_stock_list(self):
+        file_path = os.path.join(self.single_data_dir, 'single_stock_list.csv')
+        df = pd.read_csv(file_path, header=0, usecols=['ts_code'], encoding='utf-8')
+        return df.values.flatten()
 
-    return data_x[:-1], data_x[-1:], data_y
+    def gen_dataset(self):
+        stocks = self.get_valid_single_stock_list()
+        dataset = None
+        for stock in stocks:
+            st_code = stock.split('.')[0]
+            file = os.path.join(self.data_dir, st_code + ".csv")
+            df = pd.read_csv(file, header=0, encoding='utf-8')
+            if df is None:
+                continue
+
+            values = df.values[:, 1:].astype('float32')
+            dataset_one = self.scaler.fit_transform(values)
+
+            if dataset is None:
+                dataset = dataset_one
+            else:
+                dataset = np.concatenate([dataset, dataset_one], axis=0)
+
+        print(dataset.shape)
+        return dataset[:, :-1].reshape((-1, self.time_steps, self.features)), dataset[:, -1:]
+
+    def prepare_model(self):
+        if not self.skip_saved_model:
+            if os.path.exists(self.model_file):
+                self.model = load_model(self.model_file)
+
+        if self.model is None:
+            self.model = Sequential()
+            self.model.add(LSTM(50, input_shape=(self.time_steps, self.features), return_sequences=True))
+            self.model.add(LSTM(100, return_sequences=False))
+            self.model.add(Dense(1))
+            self.model.compile(loss='mae', optimizer='adam')
+
+        return self.model
+
+    def single_lstm_train(self):
+        data_x, data_y = self.gen_dataset()
+        train_size = int(data_x.shape[0] * 0.9)
+        train_x, test_x = data_x[:train_size], data_x[train_size:]
+        train_y, test_y = data_y[:train_size], data_y[train_size:]
+        model = self.prepare_model()
+        model.fit(train_x, train_y, epochs=200, batch_size=64, validation_data=(test_x, test_y), verbose=1,
+                  shuffle=True)
+        model.save(self.model_file)
+
+    '''
+    def process_file(path, st_code):
+        model_file_name = g_modelDir + '/model_' + st_code + '.h5'
+    
+        train_x, data_x_last, train_y = get_dataset_from_file(path)
+        print(train_x.shape, train_y.shape)
+    
+        model = prepare_model(model_file_name, g_preLen, train_x.shape[2])
+        model.fit(train_x, train_y, epochs=200, batch_size=64, verbose=0, shuffle=True)
+        model.save(model_file_name)
+    
+        last_predict = model.predict(data_x_last)
+        last_inverse_input = [[0, 0, 0, last_predict, 0, 0, 0]]
+        last_predict = scaler.inverse_transform(last_inverse_input)
+        predict = last_predict[:, 3][0]
+        #csv_write.writerow([st_code, predict])
+        print("lastPredict=", predict)
 
 
-def prepare_model(model_file_name, time_steps, features):
-    model = None
-    if not skip_saved_model:
-        if os.path.exists(model_file_name):
-            model = load_model(model_file_name)
-
-    if model is None:
-        model = Sequential()
-        model.add(LSTM(50, input_shape=(time_steps, features)))
-        model.add(Dense(1))
-        model.compile(loss='mae', optimizer='adam')
-
-    return model
-
-
-def get_dataset_from_file(file_name):
-    cols = ['open', 'high', 'low', 'close', 'pre_close', 'vol', 'amount']
-    data = read_csv(file_name, header=0, usecols=cols, encoding='utf-8')
-    values = data.values.astype('float32')
-    dataset = scaler.fit_transform(values)
-    data_x, data_x_last, data_y = prepare_dataset(dataset, g_preLen)
-
-    return data_x, data_x_last, data_y
+    def process_dir(dir):
+        list = os.listdir(dir)
+        count = 0
+        skip_cnt = 0
+    
+        for i in range(skip_cnt, len(list)):
+            if not list[i].endswith(".csv"):
+                continue
+    
+            st_code = list[i][:-4]
+            path = os.path.join(dir, list[i])
+            if os.path.isfile(path):
+                process_file(path, st_code)
+    
+            count += 1
+    
+            if count == 10:
+                break
+    '''
 
 
-def process_file(path, st_code):
-    model_file_name = g_modelDir + '/model_' + st_code + '.h5'
-
-    train_x, data_x_last, train_y = get_dataset_from_file(path)
-    print(train_x.shape, train_y.shape)
-
-    model = prepare_model(model_file_name, g_preLen, train_x.shape[2])
-    model.fit(train_x, train_y, epochs=200, batch_size=64, verbose=0, shuffle=True)
-    model.save(model_file_name)
-
-    last_predict = model.predict(data_x_last)
-    last_inverse_input = [[0, 0, 0, last_predict, 0, 0, 0]]
-    last_predict = scaler.inverse_transform(last_inverse_input)
-    predict = last_predict[:, 3][0]
-    csv_write.writerow([st_code, predict])
-    print("lastPredict=", predict)
-
-
-def process_dir(dir):
-    list = os.listdir(dir)
-    count = 0
-    skip_cnt = 0
-
-    for i in range(skip_cnt, len(list)):
-        if not list[i].endswith(".csv"):
-            continue
-
-        st_code = list[i][:-4]
-        path = os.path.join(dir, list[i])
-        if os.path.isfile(path):
-            process_file(path, st_code)
-
-        count += 1
-
-        if count == 10:
-            break
-
-
-
-process_dir('../data')
-out.close()
+if __name__ == '__main__':
+    singleLstm = SingleLstm()
+    singleLstm.single_lstm_train()

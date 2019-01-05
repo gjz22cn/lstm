@@ -258,6 +258,39 @@ class DataUtil:
         for stock in stocks:
             self.get_single_dataset_for_stock(stock)
 
+    def gen_train_data_for_single_by_stock(self, ts_code, step_len):
+        train_data_dir = self.single_data_dir + '_' + str(step_len)
+        st_code = ts_code.split('.')[0]
+        file = os.path.join(self.single_data_dir, 's_'+st_code + '.csv')
+        file_train = os.path.join(train_data_dir, st_code+'.csv')
+        cols = ['open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
+        df = pd.read_csv(file, header=0, usecols=cols, encoding='utf-8')
+
+        result = df[['close']]
+        result.columns = ['result']
+
+        new_df = df
+
+        for i in range(1, step_len):
+            temp_df = df.shift(0-i)
+            temp_df.rename(columns={'open': 'open' + '_' + str(i),
+                                    'high': 'high' + '_' + str(i),
+                                    'low': 'low' + '_' + str(i),
+                                    'close': 'close' + '_' + str(i),
+                                    'vol': 'vol' + '_' + str(i),
+                                    'amount': 'amount' + '_' + str(i),
+                                    'p230': 'p230' + '_' + str(i)}, inplace=True)
+
+            new_df = pd.concat((new_df, temp_df), axis=1)
+
+        new_df = pd.concat((new_df, result.shift(0-step_len)), axis=1)
+        new_df = new_df.iloc[:0-step_len]
+        new_df.to_csv(file_train, columns=new_df.columns, mode='w', header=True, encoding="utf_8_sig")
+
+    def gen_train_data_for_single(self, step_len):
+        stocks = self.get_valid_single_stock_list()
+        for stock in stocks:
+            self.gen_train_data_for_single_by_stock(stock, step_len)
 
 
 if __name__ == '__main__':
@@ -273,3 +306,5 @@ if __name__ == '__main__':
 
     # generate dataset for single predict
     #dataUtil.gen_single_data()
+
+    #dataUtil.gen_train_data_for_single(10)
