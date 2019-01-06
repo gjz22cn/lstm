@@ -96,15 +96,28 @@ class DataUtil:
 
     def get_p230_in_date_file(self, date_file):
         if not date_file.endswith('.csv'):
-            return None
+            return None, None, None, None, None, None, None
 
         cols = ['time', 'price', 'change', 'volume', 'amount', 'type']
         df = pd.read_csv(date_file, header=0, usecols=cols, encoding='utf-8')
-        for index, row in df.iterrows():
-            if row['time'] >= '14:30:00':
-                return row['price']
 
-        return None
+        for i in range(df.shape[0]-1, -1, -1):
+            if df[i:i+1]['time'].values[0] <= "14:40:00":
+                break
+
+        if i == 0:
+            return None, None, None, None, None, None, None
+
+        open_p = df[0:1]['price'].values[0]
+        close = df[i:i+1]['price'].values[0]
+        p230 = close
+        df = df[:i + 1]
+        high = df['price'].max()
+        low = df['price'].min()
+        vol = df['volume'].sum()
+        amount = df['amount'].sum()/1000
+
+        return open_p, high, low, close, vol, amount, p230
 
     def gen_p230_for_stock(self, ts_code):
         st_code = ts_code.split('.')[0]
@@ -119,14 +132,14 @@ class DataUtil:
             if len(item) < 19:
                 continue
             date = item[7:15]
-            p230 = self.get_p230_in_date_file(os.path.join(dir, item))
+            open_p, high, low, close, vol, amount, p230 = self.get_p230_in_date_file(os.path.join(dir, item))
 
             if p230 is None:
                 continue
 
-            data.append([date, p230])
+            data.append([date, open_p, high, low, close, vol, amount, p230])
 
-        cols = ['date', 'p230']
+        cols = ['date', 'open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
         df_p230 = pd.DataFrame(data, columns=cols)
         p230_path = os.path.join(self.p230_dir, st_code + '.csv')
         df_p230.to_csv(p230_path, columns=cols, mode='w', header=True, encoding="utf_8_sig")
@@ -266,12 +279,23 @@ class DataUtil:
         cols = ['open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
         df = pd.read_csv(file, header=0, usecols=cols, encoding='utf-8')
 
+        file_230 = os.path.join(self.p230_dir, st_code + '.csv')
+        cols_230 = ['open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
+        df_230 = pd.read_csv(file_230, header=0, usecols=cols_230, encoding='utf-8')
+        df_230.rename(columns={'open': 'open_l',
+                               'high': 'high_l',
+                               'low': 'low_l',
+                               'close': 'close_l',
+                               'vol': 'vol_l',
+                               'amount': 'amount_l',
+                               'p230': 'p230_l'}, inplace=True)
+
         result = df[['close']]
         result.columns = ['result']
 
         new_df = df
 
-        for i in range(1, step_len):
+        for i in range(1, step_len-1):
             temp_df = df.shift(0-i)
             temp_df.rename(columns={'open': 'open' + '_' + str(i),
                                     'high': 'high' + '_' + str(i),
@@ -282,6 +306,9 @@ class DataUtil:
                                     'p230': 'p230' + '_' + str(i)}, inplace=True)
 
             new_df = pd.concat((new_df, temp_df), axis=1)
+
+        # this line is data at PM2:40
+        new_df = pd.concat((new_df, df_230.shift(1-step_len)), axis=1)
 
         new_df = pd.concat((new_df, result.shift(0-step_len)), axis=1)
         new_df = new_df.iloc[:0-step_len]
@@ -299,12 +326,15 @@ if __name__ == '__main__':
     # df = ts.get_tick_data('002001', date='20181203', src='tt')
     # df = ts.get_realtime_quotes('000581')
     # print(df)
+
+    # 生成 PM2:40的数据
     #dataUtil.gen_p230_for_stocks()
 
     # generate valid stock_list for single predict
+    # 检查对应的日期数据是否一致
     #dataUtil.gen_single_stock_list()
 
     # generate dataset for single predict
     #dataUtil.gen_single_data()
 
-    #dataUtil.gen_train_data_for_single(10)
+    dataUtil.gen_train_data_for_single(10)

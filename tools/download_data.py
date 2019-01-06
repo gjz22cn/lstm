@@ -5,10 +5,13 @@ import os
 import time
 import tushare as ts
 import pandas as pd
+import datetime
 
 
 class DownloadClient:
     def __init__(self):
+        self.root_dir = '../'
+        self.stocks_dir = os.path.join(self.root_dir, 'stocks')
         self.dataDir = '..\stocks'
         ts.set_token('b1de6890364825a4b7b2d227b64c09a486239daf67451c5638404c62')
         self.pro = ts.pro_api()
@@ -123,11 +126,60 @@ class DownloadClient:
             if file.startswith('002') or file.startswith('300'):
                 self.get_fenbi_for_stock(file[:-4])
 
+    def get_all_stocks(self, type):
+        file = os.path.join(self.root_dir, 'stock_list.csv')
+        if not os.path.exists(file):
+            return []
+
+        data = pd.read_csv(file, header=0, usecols=['ts_code'], encoding='utf-8')
+        data = data.values.flatten()
+
+        output = []
+        if type == 1:
+            for v in data:
+                if v.startswith('002') or v.startswith('300'):
+                    output.append(v)
+        elif type == 2:
+            for v in data:
+                if v.startswith('002') or v.startswith('300'):
+                    continue
+                output.append(v)
+        else:
+            output = data
+
+        return output
+
+    def get_data_for_stock(self, ts_code):
+        st_code = ts_code.split('.')[0]
+        file = os.path.join(self.stocks_dir, st_code+'.csv')
+        cols = ['trade_date']
+        df = pd.read_csv(file, header=0, usecols=cols, encoding='utf-8')
+        last_date = df[-1:]['trade_date'].values[0]
+
+        last_datetime = datetime.datetime.strptime(str(last_date), "%Y%m%d")
+        delta = datetime.timedelta(days=1)
+        start_datetime = last_datetime + delta
+        start_date = start_datetime.strftime('%Y%m%d')
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        df_new = self.pro.daily(ts_code=ts_code, start_date=start_date, end_date=today)
+        columns = ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'change', 'pct_chg', 'vol',
+                   'amount']
+        df_new = df_new.sort_values(by='trade_date', ascending=True)
+        df_new.to_csv(file, columns=columns, mode='a', header=False, encoding="utf_8_sig")
+
+
+    def update_data_for_stocks(self):
+        stocks = self.get_all_stocks(1)
+        for stock in stocks:
+            self.get_data_for_stock(stock)
+            break
+
 
 
 if __name__ == '__main__':
 
     downloadClient = DownloadClient()
+    downloadClient.update_data_for_stocks()
     '''
     stockList = downloadClient.getStockList()
 
@@ -143,4 +195,4 @@ if __name__ == '__main__':
 
     print("count=", count)
     '''
-    downloadClient.get_fenbi_for_stocks()
+    #downloadClient.get_fenbi_for_stocks()

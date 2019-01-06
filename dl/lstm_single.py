@@ -71,7 +71,7 @@ class SingleLstm:
         train_x, test_x = data_x[:train_size], data_x[train_size:]
         train_y, test_y = data_y[:train_size], data_y[train_size:]
         model = self.prepare_model()
-        model.fit(train_x, train_y, epochs=200, batch_size=64, validation_data=(test_x, test_y), verbose=1,
+        model.fit(train_x, train_y, epochs=20, batch_size=64, validation_data=(test_x, test_y), verbose=1,
                   shuffle=True)
         model.save(self.model_file)
 
