@@ -78,7 +78,6 @@ class DownloadClient:
 
         df.to_csv(fileFullPath, columns=columns, mode=mode, header=needHeader, encoding="utf_8_sig")
 
-
     def get_fenbi_for_stock(self, st_code):
         stock_file = os.path.join('../stocks', st_code+'.csv')
         if not os.path.exists(stock_file):
@@ -115,7 +114,6 @@ class DownloadClient:
             df = df.sort_values(by='time', ascending=True)
             df.to_csv(file_path, columns=columns, mode='w', header=True, encoding="utf_8_sig")
 
-
     def get_fenbi_for_stocks(self):
         dir = '../stocks'
         list = os.listdir(dir)
@@ -149,6 +147,32 @@ class DownloadClient:
 
         return output
 
+    def get_fenbi_for_stock_by_date_list(self, st_code, date_list):
+        columns = ['time', 'price', 'change', 'volume', 'amount', 'type']
+        count = 0
+
+        dst_dir = os.path.join('../stock', st_code)
+        if not os.path.exists(dst_dir):
+            os.makedirs(dst_dir)
+
+        for date in date_list:
+            file_path = os.path.join(dst_dir, st_code + '_' + date + '.csv')
+            if os.path.exists(file_path):
+                print("skip %s %s" % (st_code, date))
+                continue
+
+            count += 1
+            if count % 5 == 0:
+                time.sleep(1)
+
+            df = ts.get_tick_data(st_code, date=date, src='tt')
+            if df is None:
+                print("%s %s is None" % (st_code, date))
+                continue
+
+            df = df.sort_values(by='time', ascending=True)
+            df.to_csv(file_path, columns=columns, mode='w', header=True, encoding="utf_8_sig")
+
     def get_data_for_stock(self, ts_code):
         st_code = ts_code.split('.')[0]
         file = os.path.join(self.stocks_dir, st_code+'.csv')
@@ -166,7 +190,9 @@ class DownloadClient:
                    'amount']
         df_new = df_new.sort_values(by='trade_date', ascending=True)
         df_new.to_csv(file, columns=columns, mode='a', header=False, encoding="utf_8_sig")
-
+        date_list = df_new['trade_date'].values.flatten()
+        self.get_fenbi_for_stock_by_date_list(st_code, date_list)
+        return date_list, df_new.reset_index(drop=True)
 
     def update_data_for_stocks(self):
         stocks = self.get_all_stocks(1)
@@ -174,13 +200,11 @@ class DownloadClient:
             self.get_data_for_stock(stock)
             break
 
-
-
+'''
 if __name__ == '__main__':
-
     downloadClient = DownloadClient()
     downloadClient.update_data_for_stocks()
-    '''
+    
     stockList = downloadClient.getStockList()
 
     count = 0
@@ -194,5 +218,6 @@ if __name__ == '__main__':
         count += 1
 
     print("count=", count)
-    '''
+    
     #downloadClient.get_fenbi_for_stocks()
+'''

@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import tushare as ts
+from DownloadClient import DownloadClient
 
 
 # df = ts.get_tick_data('002001', date='2018-11-29', src='tt')
@@ -18,6 +19,8 @@ class DataUtil:
         self.single_data_dir = os.path.join(self.root_dir, 'single_d')
         ts.set_token('b1de6890364825a4b7b2d227b64c09a486239daf67451c5638404c62')
         self.pro = ts.pro_api()
+        self.downloadClient = DownloadClient()
+        self.step_len = 10
 
     def download_stock(self, code, name):
         df = self.pro.daily(ts_code=code, start_date=self.start_date, end_date=self.end_date)
@@ -148,6 +151,7 @@ class DataUtil:
         stocks = self.get_all_stocks(1)
         for stock in stocks:
             self.gen_p230_for_stock(stock)
+            break
 
     def is_valid_single_stock(self, ts_code):
         st_code = ts_code.split('.')[0]
@@ -319,6 +323,100 @@ class DataUtil:
         for stock in stocks:
             self.gen_train_data_for_single_by_stock(stock, step_len)
 
+    # the last day's data, calculated from p230
+    def gen_p230_for_stock_by_date_list(self, st_code, date_list):
+        dir = os.path.join(self.stock_dir, st_code)
+        if not os.path.exists(dir):
+            return None
+
+        data = []
+        for date in date_list:
+            file_path = os.path.join(dir, st_code + '_' + date + '.csv')
+            open_p, high, low, close, vol, amount, p230 = self.get_p230_in_date_file(file_path)
+
+            if p230 is None:
+                return None
+
+            data.append([date, open_p, high, low, close, vol, amount, p230])
+
+        cols = ['date', 'open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
+        df_p230 = pd.DataFrame(data, columns=cols)
+        p230_path = os.path.join(self.p230_dir, st_code + '.csv')
+        df_p230.to_csv(p230_path, columns=cols, mode='a', header=False, encoding="utf_8_sig")
+        return df_p230.reset_index(drop=True)
+
+    def gen_single_data_for_stock_by_date_list(self, st_code, df, df_p230):
+        df_new = pd.concat((df, df_p230), axis=1)
+        new_cols = ['trade_date', 'open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
+        file_path = os.path.join(self.single_data_dir, 's_'+st_code+'.csv')
+        df_new.to_csv(file_path, columns=new_cols, mode='a', header=False, encoding="utf_8_sig")
+        return df_new[new_cols].reset_index(drop=True)
+
+    def gen_train_data_for_single_delta(self, st_code, cnt):
+        train_data_dir = self.single_data_dir + '_' + str(self.step_len)
+        file = os.path.join(self.single_data_dir, 's_'+st_code + '.csv')
+        file_train = os.path.join(train_data_dir, st_code+'.csv')
+        cols = ['open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
+        df = pd.read_csv(file, header=0, usecols=cols, encoding='utf-8')
+
+        df = df[0-self.step_len-cnt:].reset_index(drop=True)
+        #df = pd.concat((df, df_with_p230[cols]), axis=0)
+
+        file_230 = os.path.join(self.p230_dir, st_code + '.csv')
+        cols_p230 = ['open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
+        df_p230 = pd.read_csv(file_230, header=0, usecols=cols_p230, encoding='utf-8')
+        df_p230 = df_p230[-1-cnt:-1].reset_index(drop=True)
+        df_p230.rename(columns={'open': 'open_l',
+                                'high': 'high_l',
+                                'low': 'low_l',
+                                'close': 'close_l',
+                                'vol': 'vol_l',
+                                'amount': 'amount_l',
+                                'p230': 'p230_l'}, inplace=True)
+
+        result = df[['close']]
+        result = result[0-cnt:].reset_index(drop=True)
+        result.columns = ['result']
+
+        new_df = df[:cnt]
+
+        for i in range(1, self.step_len-1):
+            temp_df = df.shift(0-i)[:cnt]
+            temp_df.rename(columns={'open': 'open' + '_' + str(i),
+                                    'high': 'high' + '_' + str(i),
+                                    'low': 'low' + '_' + str(i),
+                                    'close': 'close' + '_' + str(i),
+                                    'vol': 'vol' + '_' + str(i),
+                                    'amount': 'amount' + '_' + str(i),
+                                    'p230': 'p230' + '_' + str(i)}, inplace=True)
+
+            new_df = pd.concat((new_df, temp_df), axis=1)
+
+        # this line is data at PM2:40
+        new_df = pd.concat([new_df, df_p230], axis=1)
+        new_df = pd.concat([new_df, result], axis=1)
+        new_df.to_csv(file_train, columns=new_df.columns, mode='a', header=False, encoding="utf_8_sig")
+
+    def update_data_for_stocks(self):
+        stocks = self.get_all_stocks(1)
+        for stock in stocks:
+            st_code = stock.split('.')[0]
+            # down stock data using tushare
+            date_list, df_stock = self.downloadClient.get_data_for_stock(stock)
+
+            # gen p230
+            df_p230 = self.gen_p230_for_stock_by_date_list(st_code, date_list)
+            if df_p230 is None:
+                print("update_data_for_stocks() gen p230 for stock %s failed!" % st_code)
+                break
+
+            # gen single stock data
+            df_with_p230 = self.gen_single_data_for_stock_by_date_list(st_code, df_stock, df_p230['p230'])
+
+            # gen single train data
+            self.gen_train_data_for_single_delta(st_code, len(date_list))
+            break
+
 
 if __name__ == '__main__':
     dataUtil = DataUtil('../')
@@ -337,4 +435,6 @@ if __name__ == '__main__':
     # generate dataset for single predict
     #dataUtil.gen_single_data()
 
-    dataUtil.gen_train_data_for_single(10)
+    #dataUtil.gen_train_data_for_single(10)
+
+    #dataUtil.update_data_for_stocks()
