@@ -184,11 +184,14 @@ class DownloadClient:
         start_datetime = last_datetime + delta
         start_date = start_datetime.strftime('%Y%m%d')
         today = datetime.datetime.now().strftime('%Y%m%d')
+        print(start_date)
+        print(today)
         df_new = self.pro.daily(ts_code=ts_code, start_date=start_date, end_date=today)
         columns = ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'change', 'pct_chg', 'vol',
                    'amount']
         df_new = df_new.sort_values(by='trade_date', ascending=True)
         df_new.to_csv(file, columns=columns, mode='a', header=False, encoding="utf_8_sig")
+        print(df_new)
         date_list = df_new['trade_date'].values.flatten()
         self.get_fenbi_for_stock_by_date_list(st_code, date_list)
         return date_list, df_new.reset_index(drop=True)
