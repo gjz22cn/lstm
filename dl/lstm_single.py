@@ -4,6 +4,9 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential, load_model
 from keras.layers import Dense, LSTM
+from DownloadClient import DownloadClient
+import datetime
+from pre_process import DataUtil
 
 skip_saved_model = False
 # skip_saved_model = True
@@ -24,6 +27,7 @@ class SingleLstm:
         self.features = 7
         self.skip_saved_model = False
         self.model = None
+        self.data_util = DataUtil('../')
 
     def get_valid_single_stock_list(self):
         file_path = os.path.join(self.single_data_dir, 'single_stock_list.csv')
@@ -51,6 +55,13 @@ class SingleLstm:
         print(dataset.shape)
         return dataset[:, :-1].reshape((-1, self.time_steps, self.features)), dataset[:, -1:]
 
+    def load_p230_model(self):
+        if os.path.exists(self.model_file):
+            self.model = load_model(self.model_file)
+            return self.model
+
+        return None
+
     def prepare_model(self):
         if not self.skip_saved_model:
             if os.path.exists(self.model_file):
@@ -71,9 +82,49 @@ class SingleLstm:
         train_x, test_x = data_x[:train_size], data_x[train_size:]
         train_y, test_y = data_y[:train_size], data_y[train_size:]
         model = self.prepare_model()
-        model.fit(train_x, train_y, epochs=20, batch_size=64, validation_data=(test_x, test_y), verbose=1,
+        model.fit(train_x, train_y, epochs=200, batch_size=64, validation_data=(test_x, test_y), verbose=1,
                   shuffle=True)
         model.save(self.model_file)
+
+    def predict_with_p230_for_stock(self, st_code):
+        file = os.path.join(self.data_dir, st_code + ".csv")
+        df = pd.read_csv(file, header=0, encoding='utf-8')
+        if df is None:
+            return None
+
+        values = df.values[:, 1:-1].astype('float32')
+        last_value = self.data_util.get_p230_redict_last_input(st_code)
+        values = np.concatenate([values, last_value], axis=0)
+        dataset = self.scaler.fit_transform(values)
+
+        input = dataset[:, :-1].reshape((-1, self.time_steps, self.features))
+
+        print(input)
+        output = self.model.predict(input)
+        inverse = np.concatenate([dataset[, 0:3], output, dataset[, 4:]], axis=1)
+        predict = self.scaler.inverse_transform(inverse)
+        return predict.flatten()[0]
+
+
+    def predict_with_p230(self):
+        now = datetime.datetime.now().strftime('%H:%M')
+        if now < '14:40' or now > '2:50':
+            return
+
+        if self.load_p230_model() is None:
+            return
+
+        stocks = self.data_util.gen_today_p230()
+
+        if stocks is None or len(stocks) == 0:
+            return
+
+        for stock in stocks:
+            predict = self.predict_with_p230_for_stock(stock)
+            if predict is None:
+                continue
+
+            print("stock = %s predict=%f" % stock, predict)
 
     '''
     def process_file(path, st_code):
@@ -116,5 +167,7 @@ class SingleLstm:
 
 
 if __name__ == '__main__':
-    singleLstm = SingleLstm()
-    singleLstm.single_lstm_train()
+    downloadClient = DownloadClient()
+    downloadClient.get_today_ticks_for_stock()
+    #singleLstm = SingleLstm()
+    #singleLstm.single_lstm_train()
