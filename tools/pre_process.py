@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import tushare as ts
 from DownloadClient import DownloadClient
+import datetime
 
 
 # df = ts.get_tick_data('002001', date='2018-11-29', src='tt')
@@ -15,6 +16,7 @@ class DataUtil:
         self.end_date = '20181130'
         self.stocks_dir = os.path.join(self.root_dir, 'stocks')
         self.stock_dir = os.path.join(self.root_dir, 'stock')
+        self.stock_today_dir = os.path.join(self.root_dir, 'stock')
         self.p230_dir = os.path.join(self.root_dir, 'p230')
         self.single_data_dir = os.path.join(self.root_dir, 'single_d')
         ts.set_token('b1de6890364825a4b7b2d227b64c09a486239daf67451c5638404c62')
@@ -398,11 +400,14 @@ class DataUtil:
         new_df.to_csv(file_train, columns=new_df.columns, mode='a', header=False, encoding="utf_8_sig")
 
     def update_data_for_stocks(self):
-        stocks = self.get_all_stocks(1)
+        stocks = self.get_valid_single_stock_list()
         for stock in stocks:
             st_code = stock.split('.')[0]
             # down stock data using tushare
             date_list, df_stock = self.downloadClient.get_data_for_stock(stock)
+
+            if (date_list is None) or (len(date_list) == 0):
+                continue
 
             # gen p230
             df_p230 = self.gen_p230_for_stock_by_date_list(st_code, date_list)
@@ -415,7 +420,64 @@ class DataUtil:
 
             # gen single train data
             self.gen_train_data_for_single_delta(st_code, len(date_list))
-            break
+
+    # the last day's data, calculated from p230
+    def gen_today_p230_for_stock(self, st_code):
+        date = datetime.datetime.now().strftime('%Y%m%d')
+
+        data = []
+        file_path = os.path.join(self.stock_today_dir, st_code + '_' + date + '.csv')
+        open_p, high, low, close, vol, amount, p230 = self.get_p230_in_date_file(file_path)
+
+        if p230 is None:
+            return False
+
+        data.append([date, open_p, high, low, close, vol, amount, p230])
+
+        cols = ['date', 'open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
+        df_p230 = pd.DataFrame(data, columns=cols)
+        p230_path = os.path.join(self.p230_dir, st_code + '.csv')
+        df_p230.to_csv(p230_path, columns=cols, mode='a', header=False, encoding="utf_8_sig")
+        return True
+
+    def gen_today_p230(self):
+        stocks = self.get_valid_single_stock_list()
+        p230_stocks = []
+        for stock in stocks:
+            if self.downloadClient.get_today_fenbi_for_stock(stock):
+                p230_stocks.append(stock)
+
+        p230_stocks_2 = []
+        for stock in p230_stocks:
+            if self.gen_p230_for_stock_by_date_list(stock):
+                p230_stocks_2.append(stock)
+
+        return p230_stocks_2
+
+    def get_p230_redict_last_input(self, st_code):
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        file = os.path.join(self.single_data_dir, 's_'+st_code + '.csv')
+        cols = ['open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
+        df = pd.read_csv(file, header=0, usecols=cols, encoding='utf-8')
+
+        values = df[1-self.step_len:].reset_index(drop=True).values.astype('float32')
+
+        file_230 = os.path.join(self.p230_dir, st_code + '.csv')
+        cols_p230 = ['open', 'high', 'low', 'close', 'vol', 'amount', 'p230']
+        df_p230 = pd.read_csv(file_230, header=0, usecols=cols_p230, encoding='utf-8')
+        p230_values = df_p230[-1:].values.astype('float32')
+
+        dataset = values[0]
+        for i in range(1, values.shape[0]):
+            dataset = np.concatenate([dataset, values[i]], axis=1)
+
+        dataset = np.concatenate([dataset, p230_values], axis=1)
+
+        return dataset
+
+
+
+
 
 
 if __name__ == '__main__':
@@ -437,4 +499,4 @@ if __name__ == '__main__':
 
     #dataUtil.gen_train_data_for_single(10)
 
-    #dataUtil.update_data_for_stocks()
+    dataUtil.update_data_for_stocks()

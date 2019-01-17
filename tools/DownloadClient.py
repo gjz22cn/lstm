@@ -17,6 +17,7 @@ class DownloadClient:
         self.pro = ts.pro_api()
         self.start_date = '20140101'
         self.end_date = '20181231'
+        self.sleep_cnt = 0
 
     # 查询当前所有正常上市交易的股票列表
     def getStockList(self):
@@ -83,8 +84,6 @@ class DownloadClient:
         if not os.path.exists(stock_file):
             return
 
-        count = 0
-
         dst_dir = os.path.join('../stock', st_code)
         if not os.path.exists(dst_dir):
             os.makedirs(dst_dir)
@@ -102,8 +101,8 @@ class DownloadClient:
                 print("skip %s %s" % (st_code, date))
                 continue
 
-            count += 1
-            if count % 5 == 0:
+            self.sleep_cnt += 1
+            if self.sleep_cnt % 5 == 0:
                 time.sleep(1)
 
             df = ts.get_tick_data(st_code, date=date, src='tt')
@@ -194,11 +193,24 @@ class DownloadClient:
         self.get_fenbi_for_stock_by_date_list(st_code, date_list)
         return date_list, df_new.reset_index(drop=True)
 
-    def update_data_for_stocks(self):
-        stocks = self.get_all_stocks(1)
-        for stock in stocks:
-            self.get_data_for_stock(stock)
-            break
+    def get_current_all(self):
+        df = ts.get_today_all()
+        print(df)
+
+    def get_today_fenbi_for_stock(self, st_code):
+        dst_dir = '../stock_today'
+        columns = ['time', 'price', 'change', 'volume', 'amount', 'type']
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        file_path = os.path.join(dst_dir, st_code + '_' + today + '.csv')
+
+        df = ts.get_today_ticks(st_code)
+        if df is None:
+            print("%s %s is None" % (st_code, today))
+            return False
+
+        df = df.sort_values(by='time', ascending=True)
+        df.to_csv(file_path, columns=columns, mode='w', header=True, encoding="utf_8_sig")
+        return True
 
 '''
 if __name__ == '__main__':
