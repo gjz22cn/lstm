@@ -444,7 +444,8 @@ class DataUtil:
         stocks = self.get_valid_single_stock_list()
         p230_stocks = []
         for stock in stocks:
-            if self.downloadClient.get_today_fenbi_for_stock(stock):
+            st_code = stock.split('.')[0]
+            if self.downloadClient.get_today_fenbi_for_stock(st_code):
                 p230_stocks.append(stock)
 
         p230_stocks_2 = []
@@ -476,10 +477,6 @@ class DataUtil:
         return dataset
 
 
-
-
-
-
 if __name__ == '__main__':
     dataUtil = DataUtil('../')
     # dataUtil.collect_data_for_stocks()
@@ -500,3 +497,5 @@ if __name__ == '__main__':
     #dataUtil.gen_train_data_for_single(10)
 
     dataUtil.update_data_for_stocks()
+
+    #dataUtil.gen_today_p230()
