@@ -172,12 +172,15 @@ class DownloadClient:
             df = df.sort_values(by='time', ascending=True)
             df.to_csv(file_path, columns=columns, mode='w', header=True, encoding="utf_8_sig")
 
-    def get_data_for_stock(self, ts_code):
+    def get_data_for_stock(self, ts_code, skip_date):
         st_code = ts_code.split('.')[0]
         file = os.path.join(self.stocks_dir, st_code+'.csv')
         cols = ['trade_date']
         df = pd.read_csv(file, header=0, usecols=cols, encoding='utf-8')
         last_date = df[-1:]['trade_date'].values[0]
+
+        if last_date == skip_date:
+            return
 
         last_datetime = datetime.datetime.strptime(str(last_date), "%Y%m%d")
         delta = datetime.timedelta(days=1)
@@ -192,6 +195,34 @@ class DownloadClient:
         date_list = df_new['trade_date'].values.flatten()
         self.get_fenbi_for_stock_by_date_list(st_code, date_list)
         return date_list, df_new.reset_index(drop=True)
+
+    def get_data_for_stock_no_fenbi(self, ts_code, skip_date):
+        st_code = ts_code.split('.')[0]
+        file = os.path.join(self.stocks_dir, st_code+'.csv')
+        cols = ['trade_date']
+        df = pd.read_csv(file, header=0, usecols=cols, encoding='utf-8')
+        if df is None:
+            return
+
+        last_date = df[-1:]['trade_date'].values[0]
+        if str(last_date) == skip_date:
+            print("skip", ts_code)
+            return
+
+        self.sleep_cnt += 1
+        if self.sleep_cnt%5 == 0:
+            time.sleep(1)
+
+        last_datetime = datetime.datetime.strptime(str(last_date), "%Y%m%d")
+        delta = datetime.timedelta(days=1)
+        start_datetime = last_datetime + delta
+        start_date = start_datetime.strftime('%Y%m%d')
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        df_new = self.pro.daily(ts_code=ts_code, start_date=start_date, end_date=today)
+        columns = ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'change', 'pct_chg', 'vol',
+                   'amount']
+        df_new = df_new.sort_values(by='trade_date', ascending=True)
+        df_new.to_csv(file, columns=columns, mode='a', header=False, encoding="utf_8_sig")
 
     def get_current_all(self):
         df = ts.get_today_all()
