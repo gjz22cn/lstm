@@ -12,12 +12,15 @@ class DownloadClient:
     def __init__(self):
         self.root_dir = '../'
         self.stocks_dir = os.path.join(self.root_dir, 'stocks')
+        self.zhishus_dir = os.path.join(self.root_dir, 'zhishus')
         self.dataDir = '..\stocks'
         ts.set_token('b1de6890364825a4b7b2d227b64c09a486239daf67451c5638404c62')
         self.pro = ts.pro_api()
         self.start_date = '20140101'
         self.end_date = '20181231'
         self.sleep_cnt = 0
+        self.zhishu_list = ['000001.SH', '000300.SH', '000905.SH', '399001.SZ', '399005.SZ', '399006.SZ', '399016.SZ',
+                            '399300.SZ']
 
     # 查询当前所有正常上市交易的股票列表
     def getStockList(self):
@@ -49,7 +52,8 @@ class DownloadClient:
         return stockList
 
     def getStockDailyInfo(self, code):
-        df = self.pro.daily(ts_code=code, start_date=self.start_date, end_date=self.end_date)
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        df = self.pro.daily(ts_code=code, start_date='20', end_date=today)
         '''
         名称	        类型	    描述
         ts_code	    str	    股票代码
@@ -204,6 +208,9 @@ class DownloadClient:
         if df is None:
             return
 
+        if df.shape[0] == 0:
+            return
+
         last_date = df[-1:]['trade_date'].values[0]
         if str(last_date) == skip_date:
             print("skip", ts_code)
@@ -242,6 +249,17 @@ class DownloadClient:
         df = df.sort_values(by='time', ascending=True)
         df.to_csv(file_path, columns=columns, mode='w', header=True, encoding="utf_8_sig")
         return True
+
+    def get_zhishu(self, ts_code):
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        df = self.pro.index_daily(ts_code='399300.SZ', start_date='20140101', end_date=today)
+        df = df.sort_values(by='trade_date', ascending=True)
+        file = os.path.join(self.zhishus_dir, ts_code+'.csv')
+        df.to_csv(file, mode='w', header=True, encoding="utf_8_sig")
+
+    def get_zhishus(self):
+        for zhishu in self.zhishu_list:
+            self.get_zhishu(zhishu)
 
 '''
 if __name__ == '__main__':

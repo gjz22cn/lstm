@@ -421,8 +421,8 @@ class DataUtil:
             # gen single train data
             self.gen_train_data_for_single_delta(st_code, len(date_list))
 
-    def download_for_stocks_2(self, skip_date):
-        stocks = self.get_all_stocks(2)
+    def download_for_stocks_2(self, type, skip_date):
+        stocks = self.get_all_stocks(type)
         for stock in stocks:
             # down stock data using tushare
             self.downloadClient.get_data_for_stock_no_fenbi(stock, skip_date)
@@ -504,6 +504,6 @@ if __name__ == '__main__':
 
     #dataUtil.update_data_for_stocks()
 
-    dataUtil.download_for_stocks_2('20190118')
+    dataUtil.download_for_stocks_2(3, '20190122')
 
     #dataUtil.gen_today_p230()
