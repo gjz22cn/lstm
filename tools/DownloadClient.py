@@ -19,8 +19,9 @@ class DownloadClient:
         self.start_date = '20140101'
         self.end_date = '20181231'
         self.sleep_cnt = 0
-        self.zhishu_list = ['000001.SH', '000300.SH', '000905.SH', '399001.SZ', '399005.SZ', '399006.SZ', '399016.SZ',
-                            '399300.SZ']
+        self.zhishu_list = ['000001.SH', '000016.SH', '000300.SH',
+                            '000905.SH', '399001.SZ', '399005.SZ',
+                            '399006.SZ', '399016.SZ']
 
     # 查询当前所有正常上市交易的股票列表
     def getStockList(self):
@@ -252,7 +253,7 @@ class DownloadClient:
 
     def get_zhishu(self, ts_code):
         today = datetime.datetime.now().strftime('%Y%m%d')
-        df = self.pro.index_daily(ts_code='399300.SZ', start_date='20140101', end_date=today)
+        df = self.pro.index_daily(ts_code=ts_code, start_date='20140101', end_date=today)
         df = df.sort_values(by='trade_date', ascending=True)
         file = os.path.join(self.zhishus_dir, ts_code+'.csv')
         df.to_csv(file, mode='w', header=True, encoding="utf_8_sig")
@@ -260,6 +261,41 @@ class DownloadClient:
     def get_zhishus(self):
         for zhishu in self.zhishu_list:
             self.get_zhishu(zhishu)
+
+    def get_start_date(self, file):
+        cols = ['trade_date']
+        df = pd.read_csv(file, header=0, usecols=cols, encoding='utf-8')
+        if df is None:
+            return None
+
+        last_date = df[-1:]['trade_date'].values[0]
+        last_datetime = datetime.datetime.strptime(str(last_date), "%Y%m%d")
+        delta = datetime.timedelta(days=1)
+        start_datetime = last_datetime + delta
+        start_date = start_datetime.strftime('%Y%m%d')
+        return start_date
+
+    def update_zhishu(self, ts_code):
+        file = os.path.join(self.zhishus_dir, ts_code + '.csv')
+        start_date = self.get_start_date(file)
+        need_header = False
+        mode = 'a'
+        if start_date is None:
+            start_date = '20140101'
+            need_header = False
+            mode = 'w'
+
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        if start_date > today:
+            return
+
+        df = self.pro.index_daily(ts_code=ts_code, start_date=start_date, end_date=today)
+        df = df.sort_values(by='trade_date', ascending=True)
+        df.to_csv(file, mode=mode, header=need_header, encoding="utf_8_sig")
+
+    def update_all_zhishu(self):
+        for zhishu in self.zhishu_list:
+            self.update_zhishu(zhishu)
 
 '''
 if __name__ == '__main__':

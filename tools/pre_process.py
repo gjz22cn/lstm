@@ -504,6 +504,6 @@ if __name__ == '__main__':
 
     #dataUtil.update_data_for_stocks()
 
-    dataUtil.download_for_stocks_2(3, '20190122')
+    dataUtil.download_for_stocks_2(3, '20190124')
 
     #dataUtil.gen_today_p230()

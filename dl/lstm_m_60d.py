@@ -481,10 +481,10 @@ if __name__ == '__main__':
     # Evaluate
     #   time_steps: 15, 30, 60, 90, 270
     # ##################################
-    lstmM60d.evaluate_model(15)
-    lstmM60d.evaluate_model(30)
-    lstmM60d.evaluate_model(60)
-    lstmM60d.evaluate_model(90)
+    #lstmM60d.evaluate_model(15)
+    #lstmM60d.evaluate_model(30)
+    #lstmM60d.evaluate_model(60)
+    #lstmM60d.evaluate_model(90)
 
     #lstmM60d.do_predict()
     #lstmM60d.get_top_stocks()
@@ -511,5 +511,5 @@ if __name__ == '__main__':
     lstmM60d.sort_for_predict('20190118')
     '''
 
-    #lstmM60d.predict_for_all_model_by_date('20190121')
-    #lstmM60d.sort_for_predict('20190121')
+    lstmM60d.predict_for_all_model_by_date('20190122')
+    lstmM60d.sort_for_predict('20190121')
