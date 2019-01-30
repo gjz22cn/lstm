@@ -92,5 +92,5 @@ class ZhiShu:
 if __name__ == '__main__':
     zhiShu = ZhiShu()
     #zhiShu.download_zhishu_all()
-    #zhiShu.update_zhishu_all()
+    zhiShu.update_zhishu_all()
     zhiShu.concat_all_zhishu()
