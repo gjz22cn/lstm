@@ -4,6 +4,8 @@ import pandas as pd
 import tushare as ts
 from DownloadClient import DownloadClient
 import datetime
+import matplotlib.pyplot as plt
+import seaborn
 
 
 # df = ts.get_tick_data('002001', date='2018-11-29', src='tt')
@@ -482,6 +484,122 @@ class DataUtil:
 
         return dataset
 
+    def concat_in_one_stock_by_date(self, ts_code):
+        st_code = ts_code.split('.')[0]
+        file = os.path.join(self.stocks_dir, st_code + '.csv')
+        cols = ['trade_date', 'close']
+        df_stock = pd.read_csv(file, header=0, usecols=cols, index_col=0, encoding='utf-8')
+        if df_stock is None:
+            return True
+
+        df_stock.rename(columns={'trade_date': 'trade_date', 'close': ts_code}, inplace=True)
+
+        file2 = os.path.join(self.root_dir, 'stocks_by_date.csv')
+        if not os.path.exists(file2):
+            df_stock.to_csv(file2, columns=df_stock.columns, mode='w', header=True, encoding="utf_8_sig")
+            return True
+
+        df_curr = pd.read_csv(file2, header=0, index_col=0, encoding='utf-8')
+        if df_curr is None:
+            df_stock.to_csv(file2, columns=df_stock.columns, mode='w', header=True, encoding="utf_8_sig")
+            return True
+
+        if ts_code in df_curr.columns:
+            return False
+
+        #df_all = pd.concat([df_curr, df_stock], axis=1, join_axes=[df_curr.index])
+        df_all = pd.merge(df_curr, df_stock, on="trade_date", how="left")
+        df_all.to_csv(file2, columns=df_all.columns, mode='w', header=True, encoding="utf_8_sig")
+        return True
+
+    def concat_all_stocks_by_date(self):
+        stocks = self.get_all_stocks(3)
+        count = 0
+        for stock in stocks:
+            if self.concat_in_one_stock_by_date(stock):
+                count = count + 1
+                print (stock)
+
+    def pull_up_one_stock_for_some_days(self, ts_code, days):
+        file = os.path.join(self.root_dir, 'stocks_by_date.csv')
+        df = pd.read_csv(file, header=0, index_col=0, encoding='utf-8')
+        if ts_code not in df.columns:
+            print ("stock %s not found")%(ts_code)
+            return
+
+        df_stock = df[ts_code].reset_index()
+        df_stock = df_stock.drop('trade_date', 1)
+        df_stock = df_stock[days:].reset_index()
+        df_new = pd.concat([df.drop(ts_code, 1).reset_index(), df_stock], axis=1)
+        file_out = os.path.join(self.root_dir, 'stocks_by_date_'+ts_code+'_'+str(days)+'.csv')
+        df_new.to_csv(file_out, columns=df_new.columns, mode='w', header=True, index=False, encoding="utf_8_sig")
+
+    def stocks_corr(self, ts_code, days):
+        file = os.path.join(self.root_dir, 'stocks_by_date_'+ts_code+'_'+str(days)+'.csv')
+        file_corr = os.path.join(self.root_dir, 'stocks_corr_'+ts_code+'_'+str(days)+'.csv')
+        df = pd.read_csv(file, header=0, index_col=0, encoding='utf-8').reset_index()
+        corr_df = df.corr(method='pearson')
+        corr_df.reset_index()
+        #del corr_df.index.name
+        #corr_df.head(10)
+
+        corr_df.to_csv(file_corr, columns=[ts_code], mode='w', header=True, encoding="utf_8_sig")
+
+        '''
+        file_jpg = os.path.join(self.root_dir, 'stocks_by_date.jpg')
+        f, ax = plt.subplots(figsize=(128, 128))
+        mask = np.zeros_like(corr_df)
+        mask[np.triu_indices_from(mask)] = True
+        # generate plot
+        seaborn.heatmap(corr_df, cmap='RdYlGn', vmax=1.0, vmin=-1.0, mask=mask, linewidths=0.5, ax=ax)
+        plt.yticks(rotation=0)
+        plt.xticks(rotation=90)
+        plt.show()
+        f.savefig(file_jpg, bbox_inches='tight')
+        '''
+
+    def calc_corr_for_stock_skip_days(self, ts_code, days):
+        file_corr = os.path.join(self.root_dir, 'stocks_corr_' + ts_code + '.csv')
+
+        for day in days:
+            dataUtil.pull_up_one_stock_for_some_days(ts_code, day)
+            dataUtil.stocks_corr(ts_code, day)
+
+        count = 0
+        df_corr = None
+        for day in days:
+            file = os.path.join(self.root_dir, 'stocks_corr_' + ts_code + '_' + str(day) + '.csv')
+            df = pd.read_csv(file, header=0, index_col=0, encoding='utf-8')
+            df.rename(columns={'trade_date': 'trade_date', ts_code: ts_code+'_'+str(day)}, inplace=True)
+            if count == 0:
+                df_corr = df
+            else:
+                #df_corr = pd.merge(df_corr, df, on="trade_date", how="left")
+                df_corr = pd.concat([df_corr, df], axis=1)
+
+            count = count + 1
+
+        df_corr = df_corr.drop(index=['trade_date', 'index'])
+        df_corr.to_csv(file_corr, columns=df_corr.columns, mode='w', header=True, encoding="utf_8_sig")
+
+    def filter_stock_corr_values(self, ts_code):
+        file = os.path.join(self.root_dir, 'stocks_corr_' + ts_code + '.csv')
+        file2 = os.path.join(self.root_dir, 'stocks_corr_' + ts_code + '_skip.csv')
+        df = pd.read_csv(file, header=0, index_col=0, encoding='utf-8')
+        skip_index = []
+        for index, row in df.iterrows():
+            need_skip = True
+            for item in row:
+                if item < -0.93 or item > 0.93:
+                    need_skip = False
+                    break
+
+            if need_skip:
+                skip_index.append(index)
+
+        df = df.drop(index=skip_index)
+        df.to_csv(file2, columns=df.columns, mode='w', header=True, encoding="utf_8_sig")
+
 
 if __name__ == '__main__':
     dataUtil = DataUtil('../')
@@ -504,6 +622,19 @@ if __name__ == '__main__':
 
     #dataUtil.update_data_for_stocks()
 
-    dataUtil.download_for_stocks_2(3, '20190128')
+    # download stock data to specific date
+    #dataUtil.download_for_stocks_2(3, '20190817')
+
+    # concat all stocks by date close price
+    #dataUtil.concat_all_stocks_by_date()
+
+    # pull up one stock for specific days
+    #dataUtil.pull_up_one_stock_for_some_days('000848.SZ', 5)
+
+    # calc stocks corr
+    #dataUtil.stocks_corr('000848.SZ')
+
+    #dataUtil.calc_corr_for_stock_skip_days('000848.SZ', [5, 10, 15, 20])
+    dataUtil.filter_stock_corr_values('000848.SZ')
 
     #dataUtil.gen_today_p230()
