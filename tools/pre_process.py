@@ -24,10 +24,12 @@ class DataUtil:
         self.stock_today_dir = os.path.join(self.root_dir, 'stock')
         self.p230_dir = os.path.join(self.root_dir, 'p230')
         self.single_data_dir = os.path.join(self.root_dir, 'single_d')
+        self.corr_dir = os.path.join(self.root_dir, 'corr')
         ts.set_token('b1de6890364825a4b7b2d227b64c09a486239daf67451c5638404c62')
         self.pro = ts.pro_api()
         self.downloadClient = DownloadClient()
         self.step_len = 10
+        self.eva_date = ''
 
     def download_stock(self, code, name):
         df = self.pro.daily(ts_code=code, start_date=self.start_date, end_date=self.end_date)
@@ -517,11 +519,33 @@ class DataUtil:
 
     def concat_all_stocks_by_date(self):
         stocks = self.get_all_stocks(3)
-        count = 0
         for stock in stocks:
             if self.concat_in_one_stock_by_date(stock):
-                count = count + 1
-                print (stock)
+                print(stock)
+
+    def concat_all_stocks_by_date_range(self, start_date, end_date):
+        file_out = os.path.join(self.corr_dir, 'stocks_by_date_' + str(start_date) + '_' + str(end_date) + '.csv')
+
+        stocks = self.get_all_stocks(3)
+        df_out = None
+        for stock in stocks:
+            print(stock)
+            st_code = stock.split('.')[0]
+            file_stock = os.path.join(self.stocks_dir, st_code + '.csv')
+            cols = ['trade_date', 'close']
+            df_stock = pd.read_csv(file_stock, header=0, usecols=cols, index_col=0, encoding='utf-8')
+            if df_stock is None:
+                continue
+
+            df_stock.rename(columns={'trade_date': 'trade_date', 'close': ts_code}, inplace=True)
+            df_stock = df_stock.loc[start_date:end_date]
+
+            if df_out is None:
+                df_out = df_stock
+            else:
+                df_out = pd.merge(df_out, df_stock, on="trade_date", how="left")
+
+        df_out.to_csv(file_out, columns=df_out.columns, mode='w', header=True, encoding="utf_8_sig")
 
     def pull_up_one_stock_for_some_days(self, ts_code, days):
         file = os.path.join(self.root_dir, 'stocks_by_date.csv')
@@ -651,10 +675,10 @@ class DataUtil:
         columns = ['stock']
 
         for day in days:
-            file_ori = os.path.join(self.root_dir, 'stocks_by_date.csv')
+            file_ori = os.path.join(self.corr_dir, 'stocks_by_date' + self.eva_date + '.csv')
             df_ori = pd.read_csv(file_ori, header=0, index_col=0, encoding='utf-8')
             if ts_code not in df_ori.columns:
-                print("stock %s not found") % (ts_code)
+                print("stock not found:", ts_code)
                 columns.append(str(day))
                 max_stock.append(ts_code)
                 continue
@@ -680,16 +704,15 @@ class DataUtil:
             df_r.to_csv(file_out, mode='a', index=False, header=True, encoding="utf_8_sig")
 
     def calc_most_like_stocks_for_range(self, days, start_idx, end_idx):
-        time_stamp = time.strftime("%Y%m%d", time.localtime())
         idx_range_str = '_' + str(start_idx) + '_' + str(end_idx)
-        file_corr_range = os.path.join(self.root_dir, 'stocks_corr_all_' + time_stamp + idx_range_str + '.csv')
+        file_corr_range = os.path.join(self.corr_dir, 'stocks_corr_all_' + self.eva_date + idx_range_str + '.csv')
 
         df = None
         if os.path.exists(file_corr_range):
             df = pd.read_csv(file_corr_range, header=0, index_col=0, encoding='utf-8')
 
         count = 0
-        stocks = self.get_all_stocks(3)
+        stocks = self.get_all_stocks(1)
         for stock in stocks:
             count = count + 1
 
@@ -709,17 +732,17 @@ class DataUtil:
             end_time = datetime.datetime.now()
             print("Calc stock: %s %ds" % (stock, (end_time - start_time).seconds))
 
-    def calc_most_like_stocks_for_range_parallel(self, days, start_idx, steps):
+    def calc_most_like_stocks_for_range_parallel(self, days, start_idx, step, step_num):
         print("Starting at:", ctime())
         threads = []
-        loops = range(10)
+        loops = range(step_num)
 
         for i in loops:
-            idx_s = start_idx + i*steps
-            idx_e = idx_s + steps
+            idx_s = start_idx + i*step
+            idx_e = idx_s + step
             t = threading.Thread(target=self.calc_most_like_stocks_for_range, args=(days, idx_s, idx_e))
+            threads.append(t)
 
-        threads.append(t)
         for i in loops:
             threads[i].start()
 
@@ -728,10 +751,13 @@ class DataUtil:
 
         print("All done at:", ctime())
 
+    def set_eva_date(self, eva_date):
+        self.eva_date = eva_date
+
     def concat_two_files(self, file_ins, out):
         df = None
         for file_in in file_ins:
-            file = os.path.join(self.root_dir, file_in)
+            file = os.path.join(self.corr_dir, file_in)
             df1 = pd.read_csv(file, encoding='utf-8')
             if df is None:
                 df = df1
@@ -739,14 +765,14 @@ class DataUtil:
                 df = pd.concat([df, df1])
 
         df = df.reset_index(drop=True)
-        file_out = os.path.join(self.root_dir, out)
+        file_out = os.path.join(self.corr_dir, out)
         df.to_csv(file_out, mode='w', index=False, encoding="utf_8_sig")
     # #############################################################################################
     # calc most like stocks for range start
     # #############################################################################################
 
     # calc chg for all stocks
-    def calc_all_stocks_chg(self, days, delta):
+    def calc_all_stocks_chg(self, ori_suffix, days, delta):
         file_suf = ''
         base_index = []
         new_index = []
@@ -755,7 +781,7 @@ class DataUtil:
             new_index.insert(0, -1-day+delta)
             file_suf = file_suf + '_' + str(day)
 
-        file_ori = os.path.join(self.root_dir, 'stocks_by_date.csv')
+        file_ori = os.path.join(self.corr_dir, 'stocks_by_date' + ori_suffix + '.csv')
         df_ori = pd.read_csv(file_ori, header=0, index_col=0, encoding='utf-8')
         df_base = df_ori.iloc[base_index, :].reset_index().drop(columns=['trade_date'])
         df_new = df_ori.iloc[new_index, :].reset_index().drop(columns=['trade_date'])
@@ -763,7 +789,7 @@ class DataUtil:
         df_chg = df_delta.div(df_base, fill_value=0)
 
         time_stamp = time.strftime("%Y%m%d", time.localtime())
-        file_chg = os.path.join(self.root_dir, 'stocks_chg' + file_suf + '_' + time_stamp + '.csv')
+        file_chg = os.path.join(self.corr_dir, 'stocks_chg' + file_suf + '_' + time_stamp + '.csv')
         df_chg.to_csv(file_chg, mode='a', header=True, encoding="utf_8_sig")
 
 
@@ -789,10 +815,11 @@ if __name__ == '__main__':
     #dataUtil.update_data_for_stocks()
 
     # download stock data to specific date
-    # dataUtil.download_for_stocks_2(3, '20190824')
+    #dataUtil.download_for_stocks_2(3, '20190831')
 
     # Step2: concat all stocks by date close price
     # dataUtil.concat_all_stocks_by_date()
+    #dataUtil.concat_all_stocks_by_date_range(20170103, 20190830)
 
     # pull up one stock for specific days
     #dataUtil.pull_up_one_stock_for_some_days('000848.SZ', 5)
@@ -805,24 +832,36 @@ if __name__ == '__main__':
 
     #dataUtil.gen_today_p230()
 
+    #############################################################################
+    # steps for corr calc start
+    #############################################################################
+    # Step0: set global var
+    dataUtil.set_corr_date_range('_20170103_20190830')
+
+    # Step1: update stock data
+    # dataUtil.download_for_stocks_2(3, '20190831')
+
+    # Step2: concat all stocks by date close price
+    # dataUtil.concat_all_stocks_by_date_range(20170103, 20190830)
+
     # Step3: calc chg for all stocks
-    # dataUtil.calc_all_stocks_chg([5, 10, 15, 20], 5)
+    # dataUtil.calc_all_stocks_chg('_20170103_20190830', [5, 10, 15, 20], 5)
 
     # Step4: calc most like stocks
-    # dataUtil.calc_most_like_stocks_for_all([5, 10, 15, 20], 200)
-    #dataUtil.calc_most_like_stocks_for_range([5, 10, 15, 20], 400, 500)
-    #dataUtil.calc_most_like_stocks_for_range_parallel([5, 10, 15, 20], 400, 200)
+    # dataUtil.calc_most_like_stocks_for_range_parallel([5, 10, 15, 20], 0, 200, 5)
+    # dataUtil.calc_most_like_stocks_for_range_parallel([5, 10, 15, 20], 1000, 200, 5)
 
-    file_ins = ["stocks_corr_all_20190824.csv",
-                "stocks_corr_all_20190825.csv",
-                'stocks_corr_all_20190825_400_600.csv',
-                'stocks_corr_all_20190825_600_800.csv',
-                'stocks_corr_all_20190825_800_1000.csv',
-                'stocks_corr_all_20190825_1000_1200.csv',
-                'stocks_corr_all_20190825_1200_1400.csv',
-                'stocks_corr_all_20190825_1400_1600.csv',
-                'stocks_corr_all_20190825_1600_1800.csv',
-                'stocks_corr_all_20190825_1800_2000.csv',
-                'stocks_corr_all_20190825_2000_2200.csv',
-                'stocks_corr_all_20190825_2200_2400.csv']
-    dataUtil.concat_two_files(file_ins, "stocks_corr_all_20190825_n.csv")
+    # Step5: concat corr result
+    file_ins = ["stocks_corr_all__20170103_20190830_0_200.csv",
+                "stocks_corr_all__20170103_20190830_200_400.csv",
+                'stocks_corr_all__20170103_20190830_400_600.csv',
+                'stocks_corr_all__20170103_20190830_600_800.csv',
+                'stocks_corr_all__20170103_20190830_800_1000.csv',
+                'stocks_corr_all__20170103_20190830_1000_1200.csv',
+                'stocks_corr_all__20170103_20190830_1200_1400.csv',
+                'stocks_corr_all__20170103_20190830_1400_1600.csv',
+                'stocks_corr_all__20170103_20190830_1600_1800.csv']
+    dataUtil.concat_two_files(file_ins, "stocks_corr_all_20170103_20190830.csv")
+    #############################################################################
+    # steps for corr calc end
+    #############################################################################

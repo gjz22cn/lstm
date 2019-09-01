@@ -25,11 +25,15 @@ class StCorr:
         self.pro = ts.pro_api()
         self.downloadClient = DownloadClient()
         self.step_len = 10
+        self.eva_date = ''
 
-    def fill_chg_to_corr(self, f_corr, f_chg):
-        file_corr = os.path.join(self.corr_dir, f_corr)
-        file_chg = os.path.join(self.corr_dir, f_chg)
-        file_corr_chg = os.path.join(self.corr_dir, "stocks_corr_chg_20190825_1.csv")
+    def set_eva_date(self, eva_date):
+        self.eva_date = eva_date
+
+    def fill_chg_to_corr(self):
+        file_corr = os.path.join(self.corr_dir, 'stocks_corr_all_' + self.eva_date + '.csv')
+        file_chg = os.path.join(self.corr_dir, 'stocks_chg_' + self.eva_date + '.csv')
+        file_corr_chg = os.path.join(self.corr_dir, 'stocks_corr_chg_' + self.eva_date + '.csv')
 
         df_corr = pd.read_csv(file_corr, encoding='utf-8')
         df_chg = pd.read_csv(file_chg, encoding='utf-8')
@@ -37,7 +41,9 @@ class StCorr:
         array_corr_chg = []
         for index, row in df_corr.iterrows():
             stock = row['stock']
-            chg_5  = df_chg.loc[3, stock]
+            if stock not in df_chg.columns:
+                continue
+            chg_5 = df_chg.loc[3, stock]
             chg_10 = df_chg.loc[2, stock]
             chg_15 = df_chg.loc[1, stock]
             chg_20 = df_chg.loc[0, stock]
@@ -56,4 +62,5 @@ class StCorr:
 
 if __name__ == '__main__':
     stCorr = StCorr('../')
-    stCorr.fill_chg_to_corr('stocks_corr_all_20190825.csv', 'stocks_chg_20190825.csv')
+    stCorr.set_eva_date('20190830')
+    stCorr.fill_chg_to_corr()
