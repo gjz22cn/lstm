@@ -29,7 +29,9 @@ class DataUtil:
         self.pro = ts.pro_api()
         self.downloadClient = DownloadClient()
         self.step_len = 10
+        self.start_eva_date = 20170103
         self.eva_date = ''
+        self.eva_date_str = ''
 
     def download_stock(self, code, name):
         df = self.pro.daily(ts_code=code, start_date=self.start_date, end_date=self.end_date)
@@ -62,6 +64,9 @@ class DataUtil:
 
         # df.to_csv(file_path, columns=columns, mode=mode, header=need_header, encoding="utf_8_sig")
 
+    # ##########################################################################################
+    # stock list funcs
+    # ##########################################################################################
     def get_all_stocks(self, type):
         file = os.path.join(self.root_dir, 'stock_list.csv')
         if not os.path.exists(file):
@@ -84,6 +89,19 @@ class DataUtil:
             output = data
 
         return output
+
+    def stock_list_process(self):
+        file = os.path.join(self.root_dir, 'stock_list.csv')
+        file_out = os.path.join(self.root_dir, 'stock_list_n.csv')
+        if not os.path.exists(file):
+            return []
+
+        df = pd.read_csv(file, header=0, index_col=0, encoding='utf-8')
+        df = df.drop(index=532).reset_index()
+        df.to_csv(file_out, columns=df.columns, encoding='utf-8')
+    # ##########################################################################################
+    # stock list funcs end
+    # ##########################################################################################
 
     def get_p230_info_for_stock(self, row):
         print(row)
@@ -523,8 +541,8 @@ class DataUtil:
             if self.concat_in_one_stock_by_date(stock):
                 print(stock)
 
-    def concat_all_stocks_by_date_range(self, start_date, end_date):
-        file_out = os.path.join(self.corr_dir, 'stocks_by_date_' + str(start_date) + '_' + str(end_date) + '.csv')
+    def concat_all_stocks_by_date_range(self):
+        file_out = os.path.join(self.corr_dir, 'stocks_by_date' + self.eva_date_str + '.csv')
 
         stocks = self.get_all_stocks(3)
         df_out = None
@@ -537,8 +555,14 @@ class DataUtil:
             if df_stock is None:
                 continue
 
-            df_stock.rename(columns={'trade_date': 'trade_date', 'close': ts_code}, inplace=True)
-            df_stock = df_stock.loc[start_date:end_date]
+            if self.start_eva_date not in df_stock.index.values:
+                continue
+
+            #if self.eva_date not in df_stock.index.values:
+            #   continue
+
+            df_stock.rename(columns={'trade_date': 'trade_date', 'close': stock}, inplace=True)
+            df_stock = df_stock.loc[self.start_eva_date:self.eva_date]
 
             if df_out is None:
                 df_out = df_stock
@@ -675,7 +699,7 @@ class DataUtil:
         columns = ['stock']
 
         for day in days:
-            file_ori = os.path.join(self.corr_dir, 'stocks_by_date' + self.eva_date + '.csv')
+            file_ori = os.path.join(self.corr_dir, 'stocks_by_date' + self.eva_date_str + '.csv')
             df_ori = pd.read_csv(file_ori, header=0, index_col=0, encoding='utf-8')
             if ts_code not in df_ori.columns:
                 print("stock not found:", ts_code)
@@ -705,14 +729,14 @@ class DataUtil:
 
     def calc_most_like_stocks_for_range(self, days, start_idx, end_idx):
         idx_range_str = '_' + str(start_idx) + '_' + str(end_idx)
-        file_corr_range = os.path.join(self.corr_dir, 'stocks_corr_all_' + self.eva_date + idx_range_str + '.csv')
+        file_corr_range = os.path.join(self.corr_dir, 'stocks_corr_all' + self.eva_date_str + idx_range_str + '.csv')
 
         df = None
         if os.path.exists(file_corr_range):
             df = pd.read_csv(file_corr_range, header=0, index_col=0, encoding='utf-8')
 
         count = 0
-        stocks = self.get_all_stocks(1)
+        stocks = self.get_all_stocks(2)
         for stock in stocks:
             count = count + 1
 
@@ -753,6 +777,7 @@ class DataUtil:
 
     def set_eva_date(self, eva_date):
         self.eva_date = eva_date
+        self.eva_date_str = '_' + str(self.eva_date)
 
     def concat_two_files(self, file_ins, out):
         df = None
@@ -772,25 +797,45 @@ class DataUtil:
     # #############################################################################################
 
     # calc chg for all stocks
-    def calc_all_stocks_chg(self, ori_suffix, days, delta):
-        file_suf = ''
+    def calc_all_stocks_chg(self, days, delta):
         base_index = []
         new_index = []
         for day in days:
             base_index.insert(0, -1-day)
             new_index.insert(0, -1-day+delta)
-            file_suf = file_suf + '_' + str(day)
 
-        file_ori = os.path.join(self.corr_dir, 'stocks_by_date' + ori_suffix + '.csv')
+        file_ori = os.path.join(self.corr_dir, 'stocks_by_date' + self.eva_date_str + '.csv')
         df_ori = pd.read_csv(file_ori, header=0, index_col=0, encoding='utf-8')
         df_base = df_ori.iloc[base_index, :].reset_index().drop(columns=['trade_date'])
         df_new = df_ori.iloc[new_index, :].reset_index().drop(columns=['trade_date'])
         df_delta = df_new - df_base
         df_chg = df_delta.div(df_base, fill_value=0)
 
-        time_stamp = time.strftime("%Y%m%d", time.localtime())
-        file_chg = os.path.join(self.corr_dir, 'stocks_chg' + file_suf + '_' + time_stamp + '.csv')
-        df_chg.to_csv(file_chg, mode='a', header=True, encoding="utf_8_sig")
+        file_chg = os.path.join(self.corr_dir, 'stocks_chg' + self.eva_date_str + '.csv')
+        df_chg.to_csv(file_chg, mode='w', header=True, encoding="utf_8_sig")
+
+    def concat_all_corr_files(self):
+        array = ['_0_200', '_200_400', '_400_600', '_600_800', '_800_1000',
+                 '_1000_1200', '_1200_1400', '_1400_1600', '_1600_1800']
+        file_ins = []
+        for item in array:
+            file_ins.append('stocks_corr_all' + self.eva_date_str + item + '.csv')
+        dataUtil.concat_two_files(file_ins, 'stocks_corr_all' + self.eva_date_str + '.csv')
+
+    def test_func1(self):
+        file_stock = os.path.join(self.stocks_dir, '601866.csv')
+        cols = ['trade_date', 'close']
+        df_stock = pd.read_csv(file_stock, header=0, usecols=cols, index_col=0, encoding='utf-8')
+        if df_stock is None:
+            print("is None")
+            return
+
+        if 20170103 in df_stock.index.values:
+            print('20170103 is in')
+        else:
+            print('20170103 is not in')
+
+        print(df_stock.index.values)
 
 
 if __name__ == '__main__':
@@ -836,32 +881,25 @@ if __name__ == '__main__':
     # steps for corr calc start
     #############################################################################
     # Step0: set global var
-    dataUtil.set_corr_date_range('_20170103_20190830')
+    dataUtil.set_eva_date(20190907)
 
     # Step1: update stock data
-    # dataUtil.download_for_stocks_2(3, '20190831')
+    # dataUtil.download_for_stocks_2(3, '20190907')
 
     # Step2: concat all stocks by date close price
-    # dataUtil.concat_all_stocks_by_date_range(20170103, 20190830)
+    # dataUtil.concat_all_stocks_by_date_range()
 
     # Step3: calc chg for all stocks
-    # dataUtil.calc_all_stocks_chg('_20170103_20190830', [5, 10, 15, 20], 5)
+    #dataUtil.calc_all_stocks_chg([5, 10, 15, 20], 5)
 
     # Step4: calc most like stocks
-    # dataUtil.calc_most_like_stocks_for_range_parallel([5, 10, 15, 20], 0, 200, 5)
+    #dataUtil.calc_most_like_stocks_for_range_parallel([5, 10, 15, 20], 0, 200, 5)
     # dataUtil.calc_most_like_stocks_for_range_parallel([5, 10, 15, 20], 1000, 200, 5)
 
     # Step5: concat corr result
-    file_ins = ["stocks_corr_all__20170103_20190830_0_200.csv",
-                "stocks_corr_all__20170103_20190830_200_400.csv",
-                'stocks_corr_all__20170103_20190830_400_600.csv',
-                'stocks_corr_all__20170103_20190830_600_800.csv',
-                'stocks_corr_all__20170103_20190830_800_1000.csv',
-                'stocks_corr_all__20170103_20190830_1000_1200.csv',
-                'stocks_corr_all__20170103_20190830_1200_1400.csv',
-                'stocks_corr_all__20170103_20190830_1400_1600.csv',
-                'stocks_corr_all__20170103_20190830_1600_1800.csv']
-    dataUtil.concat_two_files(file_ins, "stocks_corr_all_20170103_20190830.csv")
+    # dataUtil.concat_all_corr_files()
     #############################################################################
     # steps for corr calc end
     #############################################################################
+    # dataUtil.test_func1()
+    dataUtil.stock_list_process()
