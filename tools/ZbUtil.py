@@ -15,6 +15,7 @@ class ZbUtil:
         self.start_date = '20140101'
         self.end_date = '20181130'
         self.stocks_dir = os.path.join(self.root_dir, 'stocks')
+        self.stocks_wk_dir = os.path.join(self.root_dir, 'stocks_wk')
         self.stock_dir = os.path.join(self.root_dir, 'stock')
         self.stock_today_dir = os.path.join(self.root_dir, 'stock')
         self.p230_dir = os.path.join(self.root_dir, 'p230')
@@ -22,12 +23,20 @@ class ZbUtil:
         self.corr_dir = os.path.join(self.root_dir, 'corr')
         self.zb_dir = os.path.join(self.root_dir, 'zb')
         self.stUtil = StUtil(self.root_dir)
+        self.calc_date = 'unknown'
 
-    def calc_stock_kdj(self, ts_code):
+    def set_calc_date(self, calc_date):
+        self.calc_date = calc_date
+
+    def calc_stock_kdj(self, ts_code, type):
         st_code = ts_code.split('.')[0]
         file = os.path.join(self.stocks_dir, st_code + '.csv')
 
-        cols = ['trade_date', 'open', 'high', 'low', 'close', 'pct_chg', 'vol', 'amount']
+        if type == 'week':
+            file = os.path.join(self.stocks_wk_dir, st_code + '.csv')
+
+        #cols = ['trade_date', 'open', 'high', 'low', 'close', 'pct_chg', 'vol', 'amount']
+        cols = ['trade_date', 'open', 'high', 'low', 'close', 'vol', 'amount']
         df = pd.read_csv(file, header=0, usecols=cols, dtype={'trade_date': str}, encoding='utf-8')
 
         if df is None:
@@ -98,10 +107,26 @@ class ZbUtil:
                 df_out = pd.concat((df_out, df_stock), axis=0)
 
         print(df_out)
-        file_out = os.path.join(self.zb_dir, 'kdj_20191221.csv')
+        file_out = os.path.join(self.zb_dir, 'kdj_'+self.calc_date+'.csv')
+        df_out.to_csv(file_out, mode='w', index=False, encoding="utf_8_sig")
+
+    def kdj_wk_filter(self, type):
+        df_out = None
+        stocks = self.stUtil.get_all_stocks(type)
+        for stock in stocks:
+            df_stock = self.calc_stock_kdj(stock, 'week')
+            if df_out is None:
+                df_out = df_stock
+            else:
+                df_out = pd.concat((df_out, df_stock), axis=0)
+
+        print(df_out)
+        file_out = os.path.join(self.zb_dir, 'kdj_wk_'+self.calc_date+'.csv')
         df_out.to_csv(file_out, mode='w', index=False, encoding="utf_8_sig")
 
 
 if __name__ == '__main__':
     zbUtil = ZbUtil('../')
-    zbUtil.kdj_filter(3)
+    zbUtil.set_calc_date('202004529')
+    #zbUtil.kdj_filter(3)
+    zbUtil.kdj_wk_filter(3)

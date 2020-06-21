@@ -2,4 +2,7 @@
 data
 stock/*
 stocks/*
+*.csv
+to_me/*
+tools/__pycache__/*
 

@@ -59,18 +59,20 @@ class StCorr:
             chg_15 = df_chg.loc[1, stock]
             chg_20 = df_chg.loc[0, stock]
             chg_total = chg_5 + chg_10 + chg_15 + chg_20
-            if chg_5 <= 0 or chg_10 <= 0 or chg_15 <= 0 or chg_20 <= 0:
-                continue
 
-            if math.isnan(chg_5) or math.isnan(chg_10) or math.isnan(chg_15) or math.isnan(chg_20):
-                continue
-
-            array_corr_chg.append([stock, chg_5, chg_10, chg_15, chg_20, chg_total])
+            #if (chg_5 > 0 and chg_10 > 0 and chg_15 > 0 and chg_20 > 0) or (chg_5 < 0 and chg_10 < 0 and chg_15 < 0 and chg_20 < 0):
+            if chg_5 > 0 and chg_10 > 0 and chg_15 > 0 and chg_20 > 0:
+            #if chg_5 < 0 and chg_10 > 0 and chg_15 > 0 and chg_20 > 0:
+            #if chg_5 < 0 and chg_10 < 0 and chg_15 > 0 and chg_20 > 0:
+            #if chg_5 > 0 and chg_10 > 0 and chg_15 > 0 and chg_20 < 0:
+                if math.isnan(chg_5) or math.isnan(chg_10) or math.isnan(chg_15) or math.isnan(chg_20):
+                    continue
+                array_corr_chg.append([stock, chg_5, chg_10, chg_15, chg_20, chg_total])
 
         df_corr_chg = pd.DataFrame(array_corr_chg, columns=['stock', '5', '10', '15', '20', 'total'])
         df_corr_chg.to_csv(file_corr_chg, mode='w', index=False, header=True, encoding="utf_8_sig")
 
-    def analysis_corr(self):
+    def analysis_corr(self, v):
         file_corr = os.path.join(self.corr_dir, 'stocks_corr_all_' + self.eva_date + '.csv')
         cols = ['stock', '5']
         df_corr = pd.read_csv(file_corr, header=0, usecols=cols, index_col=0, encoding='utf-8')
@@ -90,12 +92,12 @@ class StCorr:
 
         for i in range(len(self.corrStocks)):
             node = self.corrStocks[i]
-            if node.next_cnt > 5:
+            if node.next_cnt > v:
                 print(node.stock, node.next_cnt)
 
 
 if __name__ == '__main__':
     stCorr = StCorr('../')
-    stCorr.set_eva_date('20190907')
-    #stCorr.fill_chg_to_corr()
-    stCorr.analysis_corr()
+    stCorr.set_eva_date('20191018')
+    stCorr.fill_chg_to_corr()
+    #stCorr.analysis_corr(30)

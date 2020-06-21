@@ -12,6 +12,7 @@ class DownloadClient:
     def __init__(self):
         self.root_dir = '../'
         self.stocks_dir = os.path.join(self.root_dir, 'stocks')
+        self.stocks_wk_dir = os.path.join(self.root_dir, 'stocks_wk')
         self.zhishus_dir = os.path.join(self.root_dir, 'zhishus')
         self.dataDir = '..\stocks'
         ts.set_token('b1de6890364825a4b7b2d227b64c09a486239daf67451c5638404c62')
@@ -219,7 +220,7 @@ class DownloadClient:
 
         self.sleep_cnt += 1
         if self.sleep_cnt%5 == 0:
-            time.sleep(1)
+            time.sleep(2)
 
         last_datetime = datetime.datetime.strptime(str(last_date), "%Y%m%d")
         delta = datetime.timedelta(days=1)
@@ -229,6 +230,50 @@ class DownloadClient:
         df_new = self.pro.daily(ts_code=ts_code, start_date=start_date, end_date=today)
         columns = ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'pre_close', 'change', 'pct_chg', 'vol',
                    'amount']
+        df_new = df_new.sort_values(by='trade_date', ascending=True)
+        df_new.to_csv(file, columns=columns, mode='a', header=False, encoding="utf_8_sig")
+
+    def get_wk_data_for_stock(self, ts_code, skip_date):
+        st_code = ts_code.split('.')[0]
+        file = os.path.join(self.stocks_wk_dir, st_code+'.csv')
+        today = datetime.datetime.now().strftime('%Y%m%d')
+
+        cols = ['trade_date']
+
+        if not os.path.exists(file):
+            df_new = self.pro.weekly(ts_code=ts_code, start_date='20180101', end_date=today)
+            columns = ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'vol', 'amount']
+            df_new = df_new.sort_values(by='trade_date', ascending=True)
+            df_new.to_csv(file, columns=columns, mode='a', header=True, encoding="utf_8_sig")
+
+            self.sleep_cnt += 1
+            if self.sleep_cnt % 5 == 0:
+                time.sleep(2)
+            return
+
+        df = pd.read_csv(file, header=0, usecols=cols, encoding='utf-8')
+        if df is None:
+            return
+
+        if df.shape[0] == 0:
+            return
+
+        last_date = df[-1:]['trade_date'].values[0]
+        if str(last_date) == skip_date:
+            print("skip", ts_code)
+            return
+
+        self.sleep_cnt += 1
+        if self.sleep_cnt%5 == 0:
+            time.sleep(2)
+
+        last_datetime = datetime.datetime.strptime(str(last_date), "%Y%m%d")
+        delta = datetime.timedelta(days=1)
+        start_datetime = last_datetime + delta
+        start_date = start_datetime.strftime('%Y%m%d')
+        today = datetime.datetime.now().strftime('%Y%m%d')
+        df_new = self.pro.weekly(ts_code=ts_code, start_date=start_date, end_date=today)
+        columns = ['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 'vol', 'amount']
         df_new = df_new.sort_values(by='trade_date', ascending=True)
         df_new.to_csv(file, columns=columns, mode='a', header=False, encoding="utf_8_sig")
 

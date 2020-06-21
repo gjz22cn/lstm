@@ -90,15 +90,17 @@ class DataUtil:
 
         return output
 
-    def stock_list_process(self):
+    def stock_list_del_index(self, idx):
         file = os.path.join(self.root_dir, 'stock_list.csv')
         file_out = os.path.join(self.root_dir, 'stock_list_n.csv')
         if not os.path.exists(file):
             return []
 
         df = pd.read_csv(file, header=0, index_col=0, encoding='utf-8')
-        df = df.drop(index=532).reset_index()
-        df.to_csv(file_out, columns=df.columns, encoding='utf-8')
+        df = df.drop(index=idx).reset_index()
+        columns = ['ts_code',	'symbol', 'name', 'area', 'industry', 'fullname', 'enname',
+                   'market', 'exchange', 'curr_type', 'list_status', 'list_date', 'delist_date', 'is_hs']
+        df.to_csv(file_out, columns=columns, encoding='utf-8')
     # ##########################################################################################
     # stock list funcs end
     # ##########################################################################################
@@ -451,6 +453,7 @@ class DataUtil:
         for stock in stocks:
             # down stock data using tushare
             self.downloadClient.get_data_for_stock_no_fenbi(stock, skip_date)
+            self.downloadClient.get_wk_data_for_stock(stock, skip_date)
 
     # the last day's data, calculated from p230
     def gen_today_p230_for_stock(self, st_code):
@@ -727,7 +730,7 @@ class DataUtil:
         else:
             df_r.to_csv(file_out, mode='a', index=False, header=True, encoding="utf_8_sig")
 
-    def calc_most_like_stocks_for_range(self, days, start_idx, end_idx):
+    def calc_most_like_stocks_for_range(self, type, days, start_idx, end_idx):
         idx_range_str = '_' + str(start_idx) + '_' + str(end_idx)
         file_corr_range = os.path.join(self.corr_dir, 'stocks_corr_all' + self.eva_date_str + idx_range_str + '.csv')
 
@@ -736,7 +739,7 @@ class DataUtil:
             df = pd.read_csv(file_corr_range, header=0, index_col=0, encoding='utf-8')
 
         count = 0
-        stocks = self.get_all_stocks(2)
+        stocks = self.get_all_stocks(type)
         for stock in stocks:
             count = count + 1
 
@@ -756,7 +759,7 @@ class DataUtil:
             end_time = datetime.datetime.now()
             print("Calc stock: %s %ds" % (stock, (end_time - start_time).seconds))
 
-    def calc_most_like_stocks_for_range_parallel(self, days, start_idx, step, step_num):
+    def calc_most_like_stocks_for_range_parallel(self, type, days, start_idx, step, step_num):
         print("Starting at:", ctime())
         threads = []
         loops = range(step_num)
@@ -764,7 +767,7 @@ class DataUtil:
         for i in loops:
             idx_s = start_idx + i*step
             idx_e = idx_s + step
-            t = threading.Thread(target=self.calc_most_like_stocks_for_range, args=(days, idx_s, idx_e))
+            t = threading.Thread(target=self.calc_most_like_stocks_for_range, args=(type, days, idx_s, idx_e))
             threads.append(t)
 
         for i in loops:
@@ -881,25 +884,26 @@ if __name__ == '__main__':
     # steps for corr calc start
     #############################################################################
     # Step0: set global var
-    dataUtil.set_eva_date(20190907)
+    dataUtil.set_eva_date(20200619)
 
     # Step1: update stock data
-    # dataUtil.download_for_stocks_2(3, '20190907')
+    dataUtil.download_for_stocks_2(3, '20200619')
 
     # Step2: concat all stocks by date close price
-    # dataUtil.concat_all_stocks_by_date_range()
+    #dataUtil.concat_all_stocks_by_date_range()
 
     # Step3: calc chg for all stocks
     #dataUtil.calc_all_stocks_chg([5, 10, 15, 20], 5)
 
     # Step4: calc most like stocks
-    #dataUtil.calc_most_like_stocks_for_range_parallel([5, 10, 15, 20], 0, 200, 5)
-    # dataUtil.calc_most_like_stocks_for_range_parallel([5, 10, 15, 20], 1000, 200, 5)
+    #dataUtil.calc_most_like_stocks_for_range_parallel(1, [5, 10, 15, 20], 0, 200, 5)
+    #dataUtil.calc_most_like_stocks_for_range_parallel(1, [5, 10, 15, 20], 1000, 200, 5)
+    #dataUtil.calc_most_like_stocks_for_range_parallel(1, [5, 10, 15, 20], 2000, 200, 5)
 
     # Step5: concat corr result
-    # dataUtil.concat_all_corr_files()
+    #dataUtil.concat_all_corr_files()
     #############################################################################
     # steps for corr calc end
     #############################################################################
     # dataUtil.test_func1()
-    dataUtil.stock_list_process()
+    #dataUtil.stock_list_del_index(idx)
